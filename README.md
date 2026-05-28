@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="AnimaStage" width="900"/>
+  <img src="assets/pasted file.jpg" alt="AnimaStage" width="900"/>
 </p>
 
 <h1 align="center">⚡ AnimaStage — Browser-Native MMD Studio</h1>
