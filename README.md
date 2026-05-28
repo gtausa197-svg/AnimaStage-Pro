@@ -462,7 +462,7 @@ vendor/
 ## 🤝 Links & Community
 
 - 🌐 **Website**: [animastagepro.dev](animastagepro.dev)
-- 🎬 **Demo**: [](animastagepro.dev)
+- 🎬 **Demo**: [animastagepro.dev](animastagepro.dev)
 
 ---
 
