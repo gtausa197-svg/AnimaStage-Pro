@@ -489,5 +489,5 @@ GPL-3.0 license — see `LICENSE`.
   <b>Multi-character · Bone editor · Cinematic camera · Bullet physics · MP4 export</b><br>
   <b>Built in the browser. Runs anywhere.</b><br>
   <br>
-  <a href="animastagepro.dev"> https://animastagepro.dev</a>
+  <a href="animastagepro.dev">https://animastagepro.dev</a>
 </p>
