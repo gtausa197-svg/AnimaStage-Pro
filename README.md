@@ -463,7 +463,7 @@ vendor/
 
 - 🌐 **Website**: [animastagepro.dev](animastagepro.dev)
 - 🎬 **Demo**: [animastagepro.dev](animastagepro.dev)
-
+- Lite-version https://animastage-lite.app/
 ---
 
 ## 📄 Citation
@@ -481,7 +481,7 @@ vendor/
 
 ## 📝 License
 
-Apache 2.0 — see `LICENSE`.
+GPL-3.0 license — see `LICENSE`.
 
 ---
 
