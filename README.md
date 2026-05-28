@@ -445,17 +445,16 @@ vendor/
 ## 🛣️ Roadmap
 
 - [x] AnimaStage Lite v1.0 — Shorts-first, WebCodecs, 9:16 mode
-- [x] AnimaStage Pro v5.0 — multi-char, bone editor, cinematic camera, dual timeline
+- [x] AnimaStage Pro v1.0 — multi-char, bone editor, cinematic camera, dual timeline
 - [x] Bullet physics with W-bone support (Sour Miku, TDA)
 - [x] ZIP drag-drop with texture auto-resolve
 - [x] Procedural sky + 6 weather presets
 - [x] Full post-FX pipeline (SSAO, DOF, volumetric, bloom, color grade)
 - [x] Session save / load JSON
 - [x] VMD export (Lite)
-- [ ] Real-time collaboration (shared scene, live cursors, comments)
 - [ ] AI-assisted motion infill / generative keyframes
 - [ ] 4K PBR texture pipeline
-- [ ] Neuromorphic / WebGPU renderer migration
+- [ ] WebGPU renderer migration
 - [ ] Mobile-optimized touch controls
 ---
 
