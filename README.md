@@ -452,22 +452,17 @@ vendor/
 - [x] Full post-FX pipeline (SSAO, DOF, volumetric, bloom, color grade)
 - [x] Session save / load JSON
 - [x] VMD export (Lite)
-- [ ] **Open source release — Summer 2026**
 - [ ] Real-time collaboration (shared scene, live cursors, comments)
 - [ ] AI-assisted motion infill / generative keyframes
 - [ ] 4K PBR texture pipeline
 - [ ] Neuromorphic / WebGPU renderer migration
 - [ ] Mobile-optimized touch controls
-- [ ] NeurIPS-adjacent rendering paper
-
 ---
 
 ## 🤝 Links & Community
 
-- 🌐 **Website**: [www.animastage.net](https://www.animastage.net)
-- 🎬 **Demo video**: [YouTube / promo reel](https://www.animastage.net/demo)
-- 💬 **Discord**: [Join the community](https://discord.gg/)
-- 📄 **Technical passport**: see `TECH_SPEC.md`
+- 🌐 **Website**: [animastagepro.dev](animastagepro.dev)
+- 🎬 **Demo**: [](animastagepro.dev)
 
 ---
 
@@ -495,5 +490,5 @@ Apache 2.0 — see `LICENSE`.
   <b>Multi-character · Bone editor · Cinematic camera · Bullet physics · MP4 export</b><br>
   <b>Built in the browser. Runs anywhere.</b><br>
   <br>
-  <a href="https://www.animastage.net">www.animastage.net</a>
+  <a href="animastagepro.dev">animastagepro.dev</a>
 </p>
