@@ -1,0 +1,6 @@
+{
+  "name": "AnimaStage Pro Landing",
+  "description": "Presentation site for the MMD Viewer RTX-style browser-based application.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
