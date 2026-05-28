@@ -460,7 +460,7 @@ vendor/
 
 ## 🤝 Links & Community
 
-- 🌐 **Website**: [animastagepro.dev]( https://animastagepro.de)
+- 🌐 **Website**: [animastagepro.dev]( https://animastagepro.dev)
 - 🎬 **Demo**: [animastagepro.dev]( https://animastagepro.dev)
 - Lite-version https://animastage-lite.app/
 ---
@@ -470,7 +470,7 @@ vendor/
 ```bibtex
 @software{animastage2026,
   title   = {AnimaStage: Browser-Native MMD Studio with Cinematic Render Pipeline},
-  author  = {Zerdovazd FBNonaMe},
+  author  = {Zerdovad FBNonaMe},
   year    = {2026},
   url     = {animastage-lite.app animastagepro.dev}
 }
