@@ -471,9 +471,9 @@ vendor/
 ```bibtex
 @software{animastage2026,
   title   = {AnimaStage: Browser-Native MMD Studio with Cinematic Render Pipeline},
-  author  = {Your Name and Collaborator Name},
+  author  = {Zerdovazd FBNonaMe},
   year    = {2026},
-  url     = {https://github.com/your-handle/AnimaStage}
+  url     = {animastage-lite.app animastagepro.dev}
 }
 ```
 
