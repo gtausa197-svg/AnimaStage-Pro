@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-Pro%205.0%20%2B%20Lite%201.0-blue" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-Pro%201.0%20%2B%20Lite%201.0-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/Renderer-WebGL%202.0%20%2B%20Three.js-orange" alt="WebGL2"/>
   <img src="https://img.shields.io/badge/Physics-Bullet%20WASM-green" alt="Physics"/>
   <img src="https://img.shields.io/badge/Export-WebCodecs%20MP4-red" alt="Export"/>
