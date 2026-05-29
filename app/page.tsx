@@ -311,9 +311,14 @@ export default function Home() {
             >
               <Play className="w-3 h-3 fill-black" /> Start Rendering
             </button>
-            <button className="px-6 py-3 border border-zinc-800 text-white text-[10px] uppercase tracking-widest bg-black hover:bg-zinc-900 transition-colors flex items-center gap-3">
+            <a
+              href="https://github.com/gtausa197-svg/AnimaStage-Pro"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-3 border border-zinc-800 text-white text-[10px] uppercase tracking-widest bg-black hover:bg-zinc-900 transition-colors flex items-center gap-3"
+            >
               <Download className="w-3 h-3 text-zinc-400" /> Download Example Suite
-            </button>
+            </a>
           </FadeIn>
         </div>
       </section>
@@ -538,9 +543,14 @@ export default function Home() {
               >
                 Open AnimaStage Pro
               </button>
-              <button className="h-12 px-8 w-full sm:w-auto border border-zinc-800 bg-black text-white font-bold text-[10px] uppercase tracking-widest hover:bg-zinc-900 transition-colors">
+              <a
+                href="https://github.com/gtausa197-svg/AnimaStage-Pro#readme"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-12 px-8 w-full sm:w-auto border border-zinc-800 bg-black text-white font-bold text-[10px] uppercase tracking-widest hover:bg-zinc-900 transition-colors flex items-center justify-center"
+              >
                 Read Documentation
-              </button>
+              </a>
             </div>
           </FadeIn>
         </div>
