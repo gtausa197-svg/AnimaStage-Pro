@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync-public": "node scripts/sync-public-studio.mjs",
+    "predev": "npm run sync-public",
     "dev": "next dev",
+    "prebuild": "npm run sync-public",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
