@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/Format-PMX%20%2F%20PMD%20%2F%20VMD-purple" alt="Format"/>
   <img src="https://img.shields.io/badge/Shorts-9%3A16%20Ready-ff69b4" alt="Shorts"/>
   <img src="https://img.shields.io/badge/GPL-3.0 license-lightgrey" alt="License"/>
-  <a href="https://www.animastage.net"><img src="https://img.shields.io/badge/🌐-Website-blue" alt="Website"/></a>
+  <a href="https://animastagepro.dev/"><img src="https://img.shields.io/badge/🌐-Website-blue" alt="Website"/></a>
 </p>
 
 ---
