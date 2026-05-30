@@ -190,6 +190,71 @@ export function createCharacterMotionSystem(deps) {
   }
 }
 
+  // Body-limb colliders (arms, legs, twist, spine/neck/head) — anything that is a
+  // rigid capsule/box bound to a skeletal limb bone, excluding cloth/accessory
+  // chains. Used to snap colliders back onto bones while manually posing so the
+  // dynamic capsules on W-bone PMX models (Sour Miku / TDA) don't drift off-axis.
+  const _LIMB_COLLIDER_BONE = /腕|肩|ひじ|肘|上腕|手首|手捩|腕捩|捩|足|ひざ|膝|足首|つま先|上半身|下半身|首|頭|spine|neck|head|arm|elbow|wrist|shoulder|leg|knee|ankle|toe|thigh|calf|hip/i;
+
+  function isPosableLimbCollider(body, mesh) {
+  if (isAccessoryPhysicsBody(body)) return false;
+  const shapeType = body.params?.shapeType;
+  if (shapeType !== 1 && shapeType !== 2) return false; // box / capsule only
+  const boneName = getPhysicsBoneName(body, mesh);
+  if (/IK|ＩＫ/i.test(boneName)) return false;
+  return _LIMB_COLLIDER_BONE.test(boneName);
+}
+
+  let _limbSnapZero = null;
+
+  // Snap a rigid body onto its bone regardless of dynamics type. RigidBody.reset()
+  // calls _setTransformFromBone() unconditionally (unlike updateFromBone(), which
+  // is a no-op for dynamic bodies), so this also re-aligns the dynamic arm/leg
+  // capsules on W-bone PMX models. Velocity is zeroed so the sim can't fling them.
+  function snapBodyToBone(body) {
+  if (typeof body?.reset !== 'function') return;
+  if (body.params?.boneIndex === -1) return; // free body, not bound to a bone
+  body.reset();
+  const ab = body.body;
+  const Ammo = getAmmo();
+  if (ab && Ammo) {
+    if (!_limbSnapZero) _limbSnapZero = new Ammo.btVector3(0, 0, 0);
+    ab.setLinearVelocity(_limbSnapZero);
+    ab.setAngularVelocity(_limbSnapZero);
+    ab.activate();
+  }
+}
+
+  // Re-align limb capsules (arms/legs/twist) to the current bone pose. Used after
+  // a manual transform so the colliders track the bones we just moved.
+  function syncLimbCollidersFromBones(mesh) {
+  const target = mesh || currentMesh;
+  if (!target?.skeleton) return;
+  const physics = animHelper.objects.get(target)?.physics || null;
+  if (!physics?.bodies?.length) return;
+
+  target.skeleton.update();
+  target.updateMatrixWorld(true);
+
+  for (const body of physics.bodies) {
+    if (!isPosableLimbCollider(body, target)) continue;
+    snapBodyToBone(body);
+  }
+}
+
+  // While posing, we must NOT step the sim for the active model: dynamic arm/leg
+  // capsules would drive (deform) the bones via _updateBones() and drift off-axis.
+  // Instead, pin every bone-bound collider onto the posed skeleton each frame so
+  // the bones stay exactly as posed and the debug capsules sit on the limbs.
+  function holdCollidersOnPose(mesh, physics) {
+  if (!mesh?.skeleton || !physics?.bodies?.length) return;
+  mesh.skeleton.update();
+  mesh.updateMatrixWorld(true);
+  for (const body of physics.bodies) {
+    snapBodyToBone(body);
+  }
+}
+
   function debugArmBodies() {
   const physics = getMeshPhysics();
   if (!physics) { console.log('no physics'); return; }
@@ -240,6 +305,35 @@ window.debugArmBodies = debugArmBodies;
   console.groupEnd();
 }
 window.debugArmIK = debugArmIK;
+
+  function debugArmDeform() {
+  if (!currentMesh?.skeleton) { console.log('no mesh'); return; }
+  const bones = currentMesh.skeleton.bones;
+  const grants = currentMesh.geometry?.userData?.MMD?.grants || [];
+  console.group('=== ARM DEFORM / GRANT ===');
+  console.log('grants total:', grants.length);
+  const armRe = /腕|肩|ひじ|肘|手首|捩/;
+  for (const g of grants) {
+    const bn = bones[g.index]?.name || '?';
+    if (!armRe.test(bn)) continue;
+    console.log({
+      bone: bn,
+      grantParent: bones[g.parentIndex]?.name || '?',
+      ratio: g.ratio,
+      affectRotation: g.affectRotation,
+      affectPosition: g.affectPosition,
+      isLocal: g.isLocal,
+    });
+  }
+  for (const b of bones) {
+    if (!armRe.test(b.name)) continue;
+    const q = b.quaternion;
+    const restIdentity = Math.abs(q.x) < 1e-4 && Math.abs(q.y) < 1e-4 && Math.abs(q.z) < 1e-4;
+    console.log({ bone: b.name, parent: b.parent?.name || '(root)', restIdentityRot: restIdentity });
+  }
+  console.groupEnd();
+}
+window.debugArmDeform = debugArmDeform;
 
   function updateRigidBodyCollisionFilter(physics, body, newTarget) {
   if (newTarget === body.params.groupTarget) return;
@@ -572,6 +666,26 @@ window.debugArmIK = debugArmIK;
 
   if (!animHelper || !states?.length) return;
 
+  // Multi-character physics throttle. Bullet cost scales with the number of
+  // simulated models; two cloth/hair-heavy PMX models can easily blow the
+  // frame budget. Cap the per-frame substep catch-up so a dropped frame can't
+  // trigger a death-spiral (each model would otherwise try to run up to
+  // maxStepNum extra steps). With a single model we keep the configured value.
+  if (S.physics && ammoReady && !ammoPhysicsBroken) {
+    const physMeshes = [];
+    for (const s of states) {
+      if (!s.mesh) continue;
+      const ph = animHelper.objects.get(s.mesh)?.physics;
+      if (ph) physMeshes.push(ph);
+    }
+    if (physMeshes.length >= 2) {
+      for (const ph of physMeshes) if (ph.maxStepNum > 2) ph.maxStepNum = 2;
+    } else if (physMeshes.length === 1) {
+      const want = effectivePhysSub();
+      if (physMeshes[0].maxStepNum !== want) physMeshes[0].maxStepNum = want;
+    }
+  }
+
   const anyWithAnim = states.some(s => s.mesh && s.activeAnimIdx >= 0);
   const anyPlaying = states.some(s => s.mesh && s.activeAnimIdx >= 0 && s.animPlaying);
 
@@ -595,20 +709,29 @@ window.debugArmIK = debugArmIK;
       if (!s.mesh) continue;
       const physics = animHelper.objects.get(s.mesh)?.physics;
       if (!physics) continue;
-      animHelper.onBeforePhysics(s.mesh);
-      physics.update(dt);
+      if (BONE.enabled && s.mesh === currentMesh) {
+        // Posing the active model: hold colliders on the posed bones instead of
+        // simulating, so dynamic limb capsules can't deform the bones or drift.
+        holdCollidersOnPose(s.mesh, physics);
+      } else {
+        animHelper.onBeforePhysics(s.mesh);
+        physics.update(dt);
+      }
     }
   }
 }
 
   function animHelperRemoveMesh(mesh) {
   if (!mesh) return;
-  stopMeshMixer(mesh);
-  disposeMeshPhysics(mesh);
-  if (mesh === currentMesh) setPhysDebugHelper(false);
-  try {
-    animHelper.remove(mesh);
-  } catch (_) { /* mesh was not registered */ }
+  // Each step is isolated: a failure freeing Bullet rigid bodies (Ammo can
+  // throw) must NOT prevent the later steps — most importantly it must not stop
+  // the caller from detaching the mesh from the scene graph, or a "removed"
+  // model keeps being rendered (shadow + volumetric depth passes), leaving its
+  // polygons in the scene and tanking FPS.
+  try { stopMeshMixer(mesh); } catch (e) { console.warn('stopMeshMixer failed', e); }
+  try { disposeMeshPhysics(mesh); } catch (e) { console.warn('disposeMeshPhysics failed', e); }
+  try { if (mesh === currentMesh) setPhysDebugHelper(false); } catch (_) {}
+  try { animHelper.remove(mesh); } catch (_) { /* mesh was not registered */ }
 }
 
   function removeScenePlaceholder() {
@@ -627,14 +750,22 @@ window.debugArmIK = debugArmIK;
   function disposeLoadedMesh(mesh) {
   if (!mesh) return;
   animHelperRemoveMesh(mesh);
-  getScene().remove(mesh);
+  // Detach from whatever the actual parent is (normally the scene). Relying on
+  // scene.remove() alone fails if the mesh was ever reparented, and any earlier
+  // throw must not skip this — so it runs unconditionally here.
+  if (mesh.parent) mesh.parent.remove(mesh);
+  else getScene().remove(mesh);
+  if (mesh === currentMesh) currentMesh = null;
   mesh.traverse((o) => {
+    if (o.isSkinnedMesh && o.skeleton && typeof o.skeleton.dispose === 'function') {
+      try { o.skeleton.dispose(); } catch (_) {}
+    }
     if (o.geometry) o.geometry.dispose();
     if (o.material) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       mats.forEach((m) => {
-        for (const k of ['map','envMap','normalMap','roughnessMap','metalnessMap','aoMap','gradientMap','matcap']) {
-          if (m[k]) m[k].dispose();
+        for (const k of ['map','envMap','normalMap','roughnessMap','metalnessMap','aoMap','gradientMap','matcap','emissiveMap','alphaMap','bumpMap','displacementMap']) {
+          if (m[k] && typeof m[k].dispose === 'function') m[k].dispose();
         }
         m.dispose();
       });
@@ -1212,9 +1343,58 @@ window.debugArmIK = debugArmIK;
   if (show) refreshBoneExplorerUI();
 }
 
-  let boneVisualRoot = null;
-  const boneVisualMap = new Map();
+  let boneVisualRoot = null;            // THREE.Group named 'VisualRig'
+  const boneVisualMap = new Map();      // boneName -> { joint, pick, jointMat, bone, baseR }
+  const boneVisualLines = [];           // { line, geo, fromBone, toBone }
   let boneVisualScale = 0.05;
+  let _rigHoverName = null;
+  // Deform W-bone pairs: { w: THREE.Bone (e.g. 右腕W), base: THREE.Bone (右腕) }.
+  // The skin + capsules are bound to the W bones; MMD drives them from the base
+  // bones via grant/append. We replicate that during manual posing.
+  let wBonePairs = [];
+
+  // Cascadeur-style rig: standard humanoid joints -> candidate PMX/English bone
+  // names (first match wins). The upper-arm bone (左腕/右腕) is preferred over the
+  // collar bone (左肩/右肩) as the selectable "shoulder" joint because rotating it
+  // is what actually poses the arm.
+  const RIG_JOINTS = [
+    { id: 'hips',      aliases: ['下半身', 'センター', 'hips', 'pelvis', 'lower body'] },
+    { id: 'spine',     aliases: ['上半身2', '上半身', 'spine', 'chest', 'upper body'] },
+    { id: 'neck',      aliases: ['首', 'neck'] },
+    { id: 'head',      aliases: ['頭', 'head'] },
+    { id: 'collarL',   aliases: ['左肩', 'shoulder_L', 'left shoulder'] },
+    { id: 'shoulderL', aliases: ['左腕', 'arm_L', 'left arm'] },
+    { id: 'elbowL',    aliases: ['左ひじ', '左肘', 'elbow_L', 'left elbow'] },
+    { id: 'wristL',    aliases: ['左手首', 'wrist_L', 'left wrist'] },
+    { id: 'collarR',   aliases: ['右肩', 'shoulder_R', 'right shoulder'] },
+    { id: 'shoulderR', aliases: ['右腕', 'arm_R', 'right arm'] },
+    { id: 'elbowR',    aliases: ['右ひじ', '右肘', 'elbow_R', 'right elbow'] },
+    { id: 'wristR',    aliases: ['右手首', 'wrist_R', 'right wrist'] },
+    { id: 'hipL',      aliases: ['左足', 'leg_L', 'left leg'] },
+    { id: 'kneeL',     aliases: ['左ひざ', '左膝', 'knee_L', 'left knee'] },
+    { id: 'ankleL',    aliases: ['左足首', 'ankle_L', 'left ankle'] },
+    { id: 'toeL',      aliases: ['左つま先', '左足先EX', 'toe_L', 'left toe'] },
+    { id: 'hipR',      aliases: ['右足', 'leg_R', 'right leg'] },
+    { id: 'kneeR',     aliases: ['右ひざ', '右膝', 'knee_R', 'right knee'] },
+    { id: 'ankleR',    aliases: ['右足首', 'ankle_R', 'right ankle'] },
+    { id: 'toeR',      aliases: ['右つま先', '右足先EX', 'toe_R', 'right toe'] },
+  ];
+  // Ordered anchor chains. Bones *between* two consecutive anchors (twist bones
+  // 腕捩/手捩, deform bones, etc.) are auto-included by walking the real skeleton
+  // hierarchy, so the rig "connects all sub-bones in the limbs".
+  const RIG_CHAINS = [
+    ['hips', 'spine', 'neck', 'head'],
+    ['spine', 'collarL', 'shoulderL', 'elbowL', 'wristL'],
+    ['spine', 'collarR', 'shoulderR', 'elbowR', 'wristR'],
+    ['hips', 'hipL', 'kneeL', 'ankleL', 'toeL'],
+    ['hips', 'hipR', 'kneeR', 'ankleR', 'toeR'],
+  ];
+  const RIG_COLOR = {
+    base: 0x35d07f,   // clean Cascadeur green
+    hover: 0xff8a3d,  // orange highlight on hover
+    sel: 0xffd23d,    // yellow selected
+    line: 0x2f8f5b,   // muted green connectors
+  };
   const boneGizmoProxy = new THREE.Object3D();
   boneGizmoProxy.name = 'boneGizmoProxy';
   getScene().add(boneGizmoProxy);
@@ -1224,13 +1404,10 @@ window.debugArmIK = debugArmIK;
   let _boneTransformRaf = 0;
 
   const BONE_VIS = {
-  matBase: null,
-  matSel: null,
   matPick: null,
   jointGeo: null,
   pickGeo: null,
-  lineMatBase: null,
-  lineMatSel: null,
+  lineMat: null,
 };
 
   const _boneQ = new THREE.Quaternion();
@@ -1272,6 +1449,9 @@ window.debugArmIK = debugArmIK;
   BONE.playing = false;
   BONE.modelKey = '';
   BONE.dragSnapshot = null;
+  wBonePairs = [];
+  _poseGrantMesh = null;
+  _poseCorrMesh = null;
   updateSkeletonHelper();
   refreshBoneListUI();
   refreshBoneTimelineUI();
@@ -1464,6 +1644,124 @@ window.debugArmIK = debugArmIK;
       .filter(c => c.isBone && c.name)
       .map(c => c.name);
   }
+  buildWBonePairs(mesh);
+}
+
+  // Detect deform W-bones (name ends in ASCII 'W' or full-width 'Ｗ') that have a
+  // matching base bone, e.g. 右腕W <- 右腕. Cached so we don't rescan every frame.
+  function buildWBonePairs(mesh) {
+  wBonePairs = [];
+  if (!mesh?.skeleton) return;
+  const byName = new Map();
+  for (const b of mesh.skeleton.bones) byName.set(b.name, b);
+  for (const b of mesh.skeleton.bones) {
+    const n = b.name;
+    if (!/[WＷ]$/.test(n)) continue;
+    const base = byName.get(n.slice(0, -1));
+    if (!base || base === b) continue;
+    // Parallel W chain (W's parent is another W / shared ancestor): grant copies
+    // the local rotation 1:1. If the W bone is a direct child of its base, the
+    // hierarchy already carries the rotation, so mirroring would double it.
+    if (b.parent === base) continue;
+    wBonePairs.push({ w: b, base });
+  }
+}
+
+  let _poseGrantSolver = null;
+  let _poseGrantMesh = null;
+  let _poseCorrIks = null;
+  let _poseCorrMesh = null;
+
+  // The model's real MMD grant/append solver (knows exact parent index + ratio +
+  // each bone's bind orientation). Far more correct than a name-based guess.
+  function getPoseGrantSolver() {
+  if (!currentMesh) return null;
+  const grants = currentMesh.geometry?.userData?.MMD?.grants;
+  if (!grants || grants.length === 0) return null;
+  if (_poseGrantMesh !== currentMesh) {
+    _poseGrantSolver = animHelper.createGrantSolver(currentMesh);
+    _poseGrantMesh = currentMesh;
+  }
+  return _poseGrantSolver;
+}
+
+  // Corrective IK chains that position deform bones (e.g. 右腕W, 右ひじW driven by
+  // 右腕IK). On heavily-rigged models the mesh follows these IK-driven bones, so we
+  // must solve them during manual posing. We deliberately EXCLUDE the foot/leg IK
+  // (足ＩＫ / つま先ＩＫ) so FK leg posing isn't fought by it.
+  const _FOOT_IK_NAME = /足ＩＫ|足IK|つま先ＩＫ|つま先IK|leg.?ik|toe.?ik|foot.?ik/i;
+
+  function getCorrectiveIkSolver() {
+  if (!currentMesh) return null;
+  const solver = animHelper.objects.get(currentMesh)?.ikSolver;
+  if (!solver?.iks?.length) return null;
+  if (_poseCorrMesh !== currentMesh) {
+    const bones = currentMesh.skeleton.bones;
+    _poseCorrIks = solver.iks.filter(ik => {
+      const names = [bones[ik.effector]?.name, bones[ik.target]?.name,
+        ...ik.links.map(l => bones[l.index]?.name)];
+      return !names.some(n => n && _FOOT_IK_NAME.test(n));
+    });
+    _poseCorrMesh = currentMesh;
+  }
+  return { solver, iks: _poseCorrIks };
+}
+
+  // Drive append/grant-bones (e.g. 右腕W carrying skin + capsule) from the manually
+  // posed source bones, exactly as playback does. addGrantRotation() multiplies
+  // onto the bone, so grant-driven bones are first reset to their rest rotation to
+  // avoid accumulating every frame. Falls back to a name-based W mirror if the
+  // model exposes no grant data.
+  function applyDeformWBones() {
+  const gs = getPoseGrantSolver();
+  if (gs) {
+    const bones = currentMesh.skeleton.bones;
+    // Reset grant-driven bones to rest first (addGrantRotation multiplies on),
+    // then re-apply grant. Skip the bone the user is editing so we never clobber
+    // a directly-posed bone that also happens to be grant-driven.
+    for (const g of gs.grants) {
+      if (g.isLocal || !g.affectRotation) continue;
+      const bone = bones[g.index];
+      if (!bone || bone.name === BONE.selected) continue;
+      const rest = BONE.restPose[bone.name];
+      const rq = Array.isArray(rest) ? rest : rest?.q;
+      if (rq) bone.quaternion.fromArray(rq);
+    }
+    for (const g of gs.grants) {
+      if (g.isLocal || !g.affectRotation) continue;
+      if (bones[g.index]?.name === BONE.selected) continue;
+      gs.updateOne(g);
+    }
+    // Then solve the corrective IK that positions the skin-deform bones.
+    applyCorrectiveIk();
+    return;
+  }
+  if (wBonePairs.length === 0) return;
+  const sel = BONE.selected;
+  for (const { w, base } of wBonePairs) {
+    if (w.name === sel) base.quaternion.copy(w.quaternion);
+    else w.quaternion.copy(base.quaternion);
+  }
+}
+
+  // Reset the corrective-IK link bones to rest, then re-solve those IK chains so
+  // the deform bones (which carry the skin) point at their targets again. IK is
+  // idempotent (solves toward the current target), so this is safe per frame.
+  function applyCorrectiveIk() {
+  const corr = getCorrectiveIkSolver();
+  if (!corr || corr.iks.length === 0) return;
+  const bones = currentMesh.skeleton.bones;
+  for (const ik of corr.iks) {
+    for (const l of ik.links) {
+      const b = bones[l.index];
+      if (!b || b.name === BONE.selected) continue;
+      const rest = BONE.restPose[b.name];
+      const rq = Array.isArray(rest) ? rest : rest?.q;
+      if (rq) b.quaternion.fromArray(rq);
+    }
+  }
+  currentMesh.updateMatrixWorld(true);
+  for (const ik of corr.iks) corr.solver.updateOne(ik);
 }
 
   function getBoneLimitRad(name) {
@@ -1627,7 +1925,14 @@ window.debugArmIK = debugArmIK;
       if (c !== BONE.selected) clampBoneRotationFromRest(c);
     }
   }
+  // Drive the skin/capsule W-bones from the posed base bones (MMD append).
+  applyDeformWBones();
   currentMesh.skeleton.update();
+  // Keep limb capsules glued to the bones we just posed so dynamic colliders on
+  // W-bone PMX models don't drift off-axis.
+  if (getS()?.physics && ammoReady && !ammoPhysicsBroken) {
+    syncLimbCollidersFromBones(currentMesh);
+  }
   if (finalize) {
     refreshBonePropsUI();
     updatePremiumBoneVisuals();
@@ -1784,6 +2089,7 @@ window.debugArmIK = debugArmIK;
     const q = sampleBoneQuaternion(b.name, t);
     if (q) b.quaternion.copy(q);
   }
+  applyDeformWBones();
   currentMesh.skeleton.update();
 }
 
@@ -1945,46 +2251,29 @@ window.debugArmIK = debugArmIK;
   });
 }
 
-  function styleBoneVisualMaterials(vis, isSel) {
-  const focus = BONE.enabled && BONE.selected && BONE.focusDimOthers;
-  const otherA = BONE.otherBoneOpacity;
-  const j = vis.jointMat;
-  const l = vis.lineMat;
+  function styleBoneVisualMaterials(vis, isSel, isHover) {
+  const m = vis.jointMat;
   if (isSel) {
-    j.opacity = 0.52;
-    j.color.copy(BONE_VIS.matSel.color);
-    l.opacity = 0.42;
-    l.color.copy(BONE_VIS.lineMatSel.color);
-  } else if (focus) {
-    j.opacity = otherA * 0.28;
-    j.color.copy(BONE_VIS.matBase.color);
-    l.opacity = otherA * 0.18;
-    l.color.copy(BONE_VIS.lineMatBase.color);
+    m.color.setHex(RIG_COLOR.sel);
+    m.opacity = 0.95;
+  } else if (isHover) {
+    m.color.setHex(RIG_COLOR.hover);
+    m.opacity = 0.95;
   } else {
-    j.opacity = BONE_VIS.matBase.opacity;
-    j.color.copy(BONE_VIS.matBase.color);
-    l.opacity = BONE_VIS.lineMatBase.opacity;
-    l.color.copy(BONE_VIS.lineMatBase.color);
+    m.color.setHex(RIG_COLOR.base);
+    m.opacity = 0.85;
   }
 }
 
   function ensureBoneVisAssets() {
   if (BONE_VIS.jointGeo) return;
-  BONE_VIS.jointGeo = new THREE.IcosahedronGeometry(1, 1);
+  // Clean solid spheres (Cascadeur look) instead of dense wireframe icosahedrons.
+  BONE_VIS.jointGeo = new THREE.SphereGeometry(1, 16, 12);
   BONE_VIS.pickGeo = new THREE.SphereGeometry(1, 8, 6);
-  BONE_VIS.matBase = new THREE.MeshBasicMaterial({
-    color: 0x9a72cc,
-    wireframe: true,
+  BONE_VIS.lineMat = new THREE.LineBasicMaterial({
+    color: RIG_COLOR.line,
     transparent: true,
-    opacity: 0.28,
-    depthTest: false,
-    depthWrite: false,
-  });
-  BONE_VIS.matSel = new THREE.MeshBasicMaterial({
-    color: 0xffd56a,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.52,
+    opacity: 0.6,
     depthTest: false,
     depthWrite: false,
   });
@@ -1995,27 +2284,15 @@ window.debugArmIK = debugArmIK;
     depthWrite: false,
     depthTest: false,
   });
-  BONE_VIS.lineMatBase = new THREE.LineBasicMaterial({
-    color: 0x7a58a8,
-    transparent: true,
-    opacity: 0.2,
-    depthTest: false,
-    depthWrite: false,
-  });
-  BONE_VIS.lineMatSel = new THREE.LineBasicMaterial({
-    color: 0xffcc55,
-    transparent: true,
-    opacity: 0.38,
-    depthTest: false,
-    depthWrite: false,
-  });
 }
 
   function disposeBoneVisuals() {
   if (boneVisualRoot) {
     getScene().remove(boneVisualRoot);
     boneVisualRoot.traverse(o => {
-      if (o.material?.dispose) o.material.dispose();
+      if (o.material && o.material !== BONE_VIS.lineMat && o.material !== BONE_VIS.matPick && o.material.dispose) {
+        o.material.dispose();
+      }
       if (o.geometry && o.geometry !== BONE_VIS.jointGeo && o.geometry !== BONE_VIS.pickGeo) {
         o.geometry.dispose();
       }
@@ -2023,12 +2300,76 @@ window.debugArmIK = debugArmIK;
     boneVisualRoot = null;
   }
   boneVisualMap.clear();
+  boneVisualLines.length = 0;
+  _rigHoverName = null;
 }
 
   function computeBoneVisualScale(mesh) {
   const box = new THREE.Box3().setFromObject(mesh);
   const size = box.getSize(new THREE.Vector3());
-  return Math.max(0.022, Math.max(size.x, size.y, size.z) * 0.013);
+  // ~1.3% of model height keeps joints readable across PMX scales (Cascadeur dots).
+  return Math.max(0.04, Math.max(size.x, size.y, size.z) * 0.013);
+}
+
+  function findRigBone(skeleton, aliases) {
+  const bones = skeleton.bones;
+  for (const alias of aliases) {
+    const a = alias.toLowerCase();
+    let b = bones.find(bn => bn.name === alias);
+    if (!b) b = bones.find(bn => bn.name.toLowerCase() === a);
+    if (!b) b = bones.find(bn => bn.name.toLowerCase().includes(a));
+    if (b) return b;
+  }
+  return null;
+}
+
+  // Walk the real skeleton hierarchy from a distal bone up to (and including) a
+  // proximal ancestor, returning [distal, ...sub-bones, proximal]. Used to pull
+  // in twist / deform sub-bones that sit between two rig anchors.
+  function collectChainBetween(distal, proximal) {
+  const chain = [];
+  let n = distal;
+  let depth = 0;
+  while (n && depth < 24) {
+    chain.push(n);
+    if (n === proximal) return chain;
+    n = (n.parent && n.parent.isBone) ? n.parent : null;
+    depth++;
+  }
+  // Proximal was not an ancestor (unusual rig) — just connect the two anchors.
+  return [distal, proximal];
+}
+
+  function addRigJoint(mesh, bone, isAnchor) {
+  if (boneVisualMap.has(bone.name)) return;
+  const jointMat = new THREE.MeshBasicMaterial({
+    color: RIG_COLOR.base,
+    transparent: true,
+    opacity: isAnchor ? 0.85 : 0.7,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const joint = new THREE.Mesh(BONE_VIS.jointGeo, jointMat);
+  joint.renderOrder = 27;
+
+  const pick = new THREE.Mesh(BONE_VIS.pickGeo, BONE_VIS.matPick);
+  pick.userData.boneName = bone.name;
+  pick.userData.isBonePick = true;
+  pick.renderOrder = 28;
+
+  boneVisualRoot.add(joint);
+  boneVisualRoot.add(pick);
+  boneVisualMap.set(bone.name, { joint, pick, jointMat, bone, isAnchor });
+}
+
+  function addRigConnector(a, b) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(6, 3));
+  const line = new THREE.Line(geo, BONE_VIS.lineMat);
+  line.renderOrder = 26;
+  line.frustumCulled = false;
+  boneVisualRoot.add(line);
+  boneVisualLines.push({ line, geo, fromBone: a, toBone: b });
 }
 
   function buildPremiumBoneVisuals(mesh) {
@@ -2037,33 +2378,35 @@ window.debugArmIK = debugArmIK;
   ensureBoneVisAssets();
   boneVisualScale = computeBoneVisualScale(mesh);
   boneVisualRoot = new THREE.Group();
-  boneVisualRoot.name = 'boneVisualRoot';
+  boneVisualRoot.name = 'VisualRig';
   boneVisualRoot.renderOrder = 25;
 
-  for (const bone of mesh.skeleton.bones) {
-    const jointMat = BONE_VIS.matBase.clone();
-    const lineMat = BONE_VIS.lineMatBase.clone();
-    const pickMat = BONE_VIS.matPick.clone();
-
-    const joint = new THREE.Mesh(BONE_VIS.jointGeo, jointMat);
-    joint.renderOrder = 26;
-
-    const pick = new THREE.Mesh(BONE_VIS.pickGeo, pickMat);
-    pick.userData.boneName = bone.name;
-    pick.userData.isBonePick = true;
-    pick.renderOrder = 27;
-
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(6, 3));
-    const line = new THREE.Line(lineGeo, lineMat);
-    line.visible = false;
-    line.renderOrder = 25;
-
-    boneVisualRoot.add(line);
-    boneVisualRoot.add(joint);
-    boneVisualRoot.add(pick);
-    boneVisualMap.set(bone.name, { joint, pick, line, jointMat, lineMat, lineGeo });
+  // Resolve the curated humanoid anchors.
+  const anchorBone = new Map(); // rig id -> resolved THREE.Bone
+  for (const def of RIG_JOINTS) {
+    const bone = findRigBone(mesh.skeleton, def.aliases);
+    if (bone) anchorBone.set(def.id, bone);
   }
+
+  // For each chain, include every bone between consecutive anchors (sub-bones),
+  // add joint spheres for them, and connect parent->child along the real chain.
+  for (const chain of RIG_CHAINS) {
+    for (let i = 0; i < chain.length - 1; i++) {
+      const proximal = anchorBone.get(chain[i]);
+      const distal = anchorBone.get(chain[i + 1]);
+      if (!proximal || !distal) continue;
+      const seg = collectChainBetween(distal, proximal); // [distal..proximal]
+      for (let s = 0; s < seg.length; s++) {
+        const isAnchor = (s === 0) || (s === seg.length - 1);
+        addRigJoint(mesh, seg[s], isAnchor);
+      }
+      // Connect each adjacent pair distal..proximal.
+      for (let s = 0; s < seg.length - 1; s++) {
+        addRigConnector(seg[s], seg[s + 1]);
+      }
+    }
+  }
+
   getScene().add(boneVisualRoot);
   updatePremiumBoneVisuals();
 }
@@ -2073,37 +2416,54 @@ window.debugArmIK = debugArmIK;
   currentMesh.updateMatrixWorld(true);
   const jr = boneVisualScale;
   const sel = BONE.selected;
-  const focus = BONE.enabled && sel && BONE.focusDimOthers;
 
-  for (const bone of currentMesh.skeleton.bones) {
-    const vis = boneVisualMap.get(bone.name);
-    if (!vis) continue;
-    bone.getWorldPosition(_boneVec);
-    const isSel = bone.name === sel;
-    const r = isSel ? jr * 1.1 : (focus ? jr * 0.75 : jr * 0.88);
+  boneVisualMap.forEach((vis, name) => {
+    vis.bone.getWorldPosition(_boneVec);
+    const isSel = name === sel;
+    const isHover = name === _rigHoverName;
+    // Sub-bones (twist/deform) render as smaller dots than the main anchors.
+    const base = vis.isAnchor ? jr : jr * 0.62;
+    const r = isSel ? base * 1.35 : (isHover ? base * 1.2 : base);
     vis.joint.position.copy(_boneVec);
     vis.joint.scale.setScalar(r);
     vis.pick.position.copy(_boneVec);
-    vis.pick.scale.setScalar(r * 1.35);
-    styleBoneVisualMaterials(vis, isSel);
+    vis.pick.scale.setScalar(r * 1.6);
+    styleBoneVisualMaterials(vis, isSel, isHover);
+  });
 
-    const parent = bone.parent;
-    if (parent?.isBone) {
-      parent.getWorldPosition(_boneVec3);
-      const len = _boneVec.distanceTo(_boneVec3);
-      if (len > jr * 0.2) {
-        vis.line.visible = true;
-        const pos = vis.lineGeo.attributes.position.array;
-        pos[0] = _boneVec3.x; pos[1] = _boneVec3.y; pos[2] = _boneVec3.z;
-        pos[3] = _boneVec.x; pos[4] = _boneVec.y; pos[5] = _boneVec.z;
-        vis.lineGeo.attributes.position.needsUpdate = true;
-      } else {
-        vis.line.visible = false;
-      }
-    } else {
-      vis.line.visible = false;
-    }
+  for (const seg of boneVisualLines) {
+    seg.fromBone.getWorldPosition(_boneVec);
+    seg.toBone.getWorldPosition(_boneVec3);
+    const pos = seg.geo.attributes.position.array;
+    pos[0] = _boneVec.x;  pos[1] = _boneVec.y;  pos[2] = _boneVec.z;
+    pos[3] = _boneVec3.x; pos[4] = _boneVec3.y; pos[5] = _boneVec3.z;
+    seg.geo.attributes.position.needsUpdate = true;
   }
+}
+
+  // Raycast the rig joints under the cursor and recolor the hovered one (orange).
+  function updateRigHover(clientX, clientY) {
+  if (!boneVisualRoot?.visible || boneVisualMap.size === 0) {
+    if (_rigHoverName) { _rigHoverName = null; updatePremiumBoneVisuals(); }
+    return null;
+  }
+  const renderer = getRenderer();
+  const camera = getCamera();
+  if (!renderer?.domElement || !camera) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  _ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  _ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  _ray.setFromCamera(_ndc, camera);
+  const pickables = [];
+  boneVisualMap.forEach(v => { if (v.pick) pickables.push(v.pick); });
+  const hits = _ray.intersectObjects(pickables, false);
+  const name = hits.length ? hits[0].object.userData?.boneName || null : null;
+  if (name !== _rigHoverName) {
+    _rigHoverName = name;
+    updatePremiumBoneVisuals();
+    if (renderer.domElement) renderer.domElement.style.cursor = name ? 'pointer' : '';
+  }
+  return name;
 }
 
   function updateSkeletonHelper() {
@@ -2174,16 +2534,25 @@ window.debugArmIK = debugArmIK;
         animHelper.update(0);
       }
     } else if (S.physics && ammoReady && !ammoPhysicsBroken && getMeshPhysics()) {
-      animHelper.onBeforePhysics(currentMesh);
-      getMeshPhysics().update(dt);
+      if (BONE.enabled) {
+        // Posing: pin colliders to the posed bones instead of stepping the sim.
+        holdCollidersOnPose(currentMesh, getMeshPhysics());
+      } else {
+        animHelper.onBeforePhysics(currentMesh);
+        getMeshPhysics().update(dt);
+      }
     }
   }
 
   function updateCharacterBoneVisuals(tickFrame = 0) {
-    if (BONE.enabled && boneVisualRoot && (tickFrame % 2 === 0)) {
-      if (!isTcDragging() && BONE.selected) syncBoneGizmoProxyFromBone();
-      updatePremiumBoneVisuals();
-    }
+    if (!BONE.enabled || !boneVisualRoot) return;
+    // "Posing" = animation paused and a model is loaded. Update the rig (and the
+    // gizmo proxy / center-of-mass tracking) every frame while posing so it feels
+    // responsive, but throttle hard during fast playback to keep 60 FPS.
+    const posing = !animPlaying && !BONE.playing;
+    if (!posing && (tickFrame % 4 !== 0)) return;
+    if (!isTcDragging() && BONE.selected) syncBoneGizmoProxyFromBone();
+    updatePremiumBoneVisuals();
   }
 
   async function initAmmoPhysics() {
@@ -2229,6 +2598,7 @@ window.debugArmIK = debugArmIK;
     applyIKFixOnly,
     freezeTwistBones,
     syncArmLimbCollidersFromBones,
+    syncLimbCollidersFromBones,
     configureArmPhysicsForAnimation,
     makeArmLimbCollidersKinematic,
     markAmmoBroken,
@@ -2277,6 +2647,7 @@ window.debugArmIK = debugArmIK;
     captureModelMaterials,
     updateSkeletonHelper,
     updatePremiumBoneVisuals,
+    updateRigHover,
     scheduleBoneTransformUpdate,
     pickBoneFromEvent,
     canPickBoneNow,
