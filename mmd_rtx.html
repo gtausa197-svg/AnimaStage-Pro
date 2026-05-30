@@ -2,6 +2,11 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0a">
 <title>MMD Viewer — RTX-style (Three.js)</title>
 <style>
   * { box-sizing: border-box; }
@@ -452,15 +457,11 @@
   /* Cinematic camera */
   #letterbox { pointer-events: none; position: absolute; inset: 0; display: none; z-index: 5; }
   #letterbox.on { display: block; }
-  #letterbox::before, #letterbox::after {
-    content: '';
-    position: absolute; left: 0; right: 0;
-    background: #000;
-  }
-  #letterbox.r239::before, #letterbox.r239::after { height: 10.5%; }
-  #letterbox.r185::before, #letterbox.r185::after { height: 6.5%; }
-  #letterbox::before { top: 0; }
-  #letterbox::after { bottom: 0; }
+  #letterbox .lb-bar { position: absolute; background: #000; pointer-events: none; }
+  #letterbox .lb-top { top: 0; left: 0; right: 0; height: var(--lb-top, 0); }
+  #letterbox .lb-bottom { bottom: 0; left: 0; right: 0; height: var(--lb-bottom, 0); }
+  #letterbox .lb-left { top: 0; bottom: 0; left: 0; width: var(--lb-left, 0); }
+  #letterbox .lb-right { top: 0; bottom: 0; right: 0; width: var(--lb-right, 0); }
   #cinHud {
     position: absolute; top: 42px; left: 10px;
     color: #ffe066; background: rgba(0,0,0,0.72);
@@ -483,16 +484,23 @@
   }
   #renderProgressText { margin-top: 4px; font-size: 11px; color: #aaa; }
   .path-key-item {
-    display: flex; align-items: center; gap: 4px;
-    padding: 3px 4px; border-radius: 2px;
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 4px; border-radius: 2px; margin-bottom: 3px;
     font-size: 11px; font-family: ui-monospace, monospace; color: #aaa;
-    cursor: pointer;
   }
   .path-key-item:hover { background: #1a1a1a; }
   .path-key-item.sel { background: #1e3a40; color: #4ec9d6; }
+  .path-key-item .pk-row { display: flex; align-items: center; gap: 4px; cursor: pointer; }
   .path-key-item .pk-t { flex: 1; }
-  .path-key-item .x { color: #888; padding: 0 4px; }
+  .path-key-item .x { color: #888; padding: 0 4px; cursor: pointer; }
   .path-key-item .x:hover { color: #f55; }
+  .path-key-item .pk-ctrls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .path-key-item .pk-ctrls label { display: flex; align-items: center; gap: 3px; color: #888; }
+  .path-key-item .pk-ctrls select, .path-key-item .pk-ctrls input {
+    background: #0a0a0a; border: 1px solid #333; color: #ccc; border-radius: 3px;
+    font-size: 10px; padding: 2px 3px;
+  }
+  .path-key-item .pk-ctrls .pk-fov, .path-key-item .pk-ctrls .pk-hold { width: 42px; }
   .scene-outliner {
     max-height: 180px;
     overflow-y: auto;
@@ -662,6 +670,298 @@
   #stage.clean-capture #timeline,
   #stage.clean-capture #drophint { visibility: hidden !important; pointer-events: none !important; }
   .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ===================== MOBILE / TOUCH UI ===================== */
+  /* Floating buttons (menu + quick play) — hidden on desktop */
+  #mobileMenuBtn, #mobileBackdrop, #mobilePlayBtn { display: none; }
+
+  @media (max-width: 820px) {
+    body { overflow: hidden; -webkit-text-size-adjust: 100%; }
+
+    #app {
+      padding: 0;
+      gap: 0;
+      height: 100vh;
+      height: 100dvh;
+    }
+    #stage {
+      border: none;
+      border-radius: 0;
+    }
+
+    /* Panel becomes a right-side slide-in drawer */
+    #panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 60;
+      width: min(86vw, 380px);
+      max-width: 380px;
+      height: 100vh;
+      height: 100dvh;
+      border-radius: 0;
+      border: none;
+      border-left: 1px solid #2a2a2a;
+      box-shadow: -12px 0 40px rgba(0,0,0,0.6);
+      transform: translateX(102%);
+      transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 8px 8px calc(20px + env(safe-area-inset-bottom)) 8px;
+      padding-top: calc(56px + env(safe-area-inset-top));
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    #panel.open { transform: translateX(0); }
+
+    /* Dim backdrop behind the open drawer */
+    #mobileBackdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 55;
+      background: rgba(0,0,0,0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s ease;
+      backdrop-filter: blur(1px);
+    }
+    #mobileBackdrop.show { opacity: 1; pointer-events: auto; }
+
+    /* Hamburger / close FAB */
+    #mobileMenuBtn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      z-index: 65;
+      top: calc(10px + env(safe-area-inset-top));
+      right: calc(10px + env(safe-area-inset-right));
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      border: 1px solid #333;
+      background: rgba(20,20,20,0.82);
+      color: #eee;
+      font-size: 20px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #mobileMenuBtn:active { transform: scale(0.94); background: rgba(40,40,40,0.9); }
+
+    /* Quick play/pause FAB bottom-right of the stage */
+    #mobilePlayBtn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      z-index: 50;
+      right: calc(12px + env(safe-area-inset-right));
+      top: 50%;
+      transform: translateY(-50%);
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 1px solid #2c6f78;
+      background: linear-gradient(180deg, #1c8d9c, #136470);
+      color: #fff;
+      font-size: 22px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.55);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #mobilePlayBtn:active { transform: translateY(-50%) scale(0.92); }
+
+    /* Bigger touch targets inside the panel */
+    details > summary { padding: 13px 12px; font-size: 15px; }
+    details > .body { padding: 8px 10px 12px; }
+    button.btn { padding: 10px 12px; font-size: 13px; min-height: 40px; }
+    .check-row { padding: 8px 0; font-size: 14px; }
+    .check-row input[type=checkbox] { width: 20px; height: 20px; }
+    .row { margin: 8px 0; }
+    .row .lbl { font-size: 13px; }
+    input.val { height: 34px; font-size: 14px; }
+    select, input[type=text], input[type=number] { min-height: 38px; font-size: 14px; }
+
+    /* Larger range thumbs for fingers */
+    input[type=range] { height: 28px; }
+    input[type=range]::-webkit-slider-thumb {
+      width: 22px; height: 22px;
+    }
+    input[type=range]::-moz-range-thumb { width: 22px; height: 22px; }
+
+    /* HUD compact; desktop mouse-hint hidden (replaced by touch hint) */
+    #hud { top: calc(8px + env(safe-area-inset-top)); left: 8px; font-size: 10px; }
+    #help { display: none; }
+    #drophint .box { max-width: 86vw; font-size: 12px; }
+
+    /* Timeline: scroll controls horizontally, fatter buttons.
+       Stack the (optional) VMD timeline above the always-on camera timeline. */
+    #cinTimeline {
+      left: 6px; right: 6px;
+      bottom: calc(6px + env(safe-area-inset-bottom));
+      padding: 10px 8px 8px;
+    }
+    #timeline {
+      left: 6px; right: 6px;
+      bottom: calc(112px + env(safe-area-inset-bottom));
+      padding: 8px;
+    }
+    #timeline .tl-top, #cinTimeline .tl-top {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      flex-wrap: nowrap;
+      scrollbar-width: none;
+    }
+    #timeline .tl-top::-webkit-scrollbar,
+    #cinTimeline .tl-top::-webkit-scrollbar { display: none; }
+    .tl-btn { padding: 8px 11px; font-size: 14px; min-height: 38px; flex: 0 0 auto; }
+    .tl-check { flex: 0 0 auto; white-space: nowrap; }
+    .tl-track, #cinTrack { height: 30px; }
+
+    /* Bone explorer / floating panels fill most of the screen */
+    #boneExplorer:not(.hidden) {
+      left: 4vw; right: 4vw; top: 8vh;
+      width: auto; max-width: none; max-height: 80vh;
+    }
+  }
+
+  /* Very small phones — even tighter */
+  @media (max-width: 420px) {
+    #panel { width: 92vw; }
+    #hud { font-size: 9px; }
+  }
+
+  /* ===================== MULTI-CHARACTER RECOMMENDATION SPLASH ===================== */
+  #castSplash {
+    position: fixed; inset: 0; z-index: 90;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.62);
+    backdrop-filter: blur(4px);
+    padding: 16px;
+  }
+  #castSplash.show { display: flex; }
+  #castSplash .card {
+    width: min(440px, 94vw);
+    max-height: 88vh; overflow-y: auto;
+    background: #16181c;
+    border: 1px solid #2c3038;
+    border-radius: 14px;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+    padding: 20px 20px 16px;
+    animation: castPop 0.22s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes castPop { from { transform: scale(0.92) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  #castSplash .cast-ico {
+    width: 46px; height: 46px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; margin-bottom: 12px;
+    background: linear-gradient(180deg, #2a6f78, #18454c);
+    border: 1px solid #347e88;
+  }
+  #castSplash h2 { margin: 0 0 6px; font-size: 18px; color: #fff; font-weight: 600; }
+  #castSplash p.sub { margin: 0 0 14px; font-size: 13px; color: #9aa3ad; line-height: 1.5; }
+  #castSplash .cast-slot {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 11px; margin-bottom: 6px;
+    background: #1d2026; border: 1px solid #2a2e36; border-radius: 9px;
+    font-size: 13px;
+  }
+  #castSplash .cast-slot .badge {
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12px;
+    background: #2a2e36; color: #cfd6de;
+  }
+  #castSplash .cast-slot.done .badge { background: #1f5e3a; color: #aef3c8; }
+  #castSplash .cast-slot.need .badge { background: #5e4a1f; color: #f3dcae; }
+  #castSplash .cast-slot .meta { flex: 1; min-width: 0; }
+  #castSplash .cast-slot .meta .nm { color: #e7ebef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #castSplash .cast-slot .meta .st { color: #8b939c; font-size: 11px; }
+  #castSplash .cast-actions { display: flex; gap: 8px; margin-top: 14px; }
+  #castSplash .cast-actions .btn { flex: 1; padding: 11px; font-size: 13px; border-radius: 9px; }
+  #castSplash .btn.ghost { background: transparent; }
+
+  /* Map Builder — dedicated location-building window */
+  #mapBuilder {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 380px; max-width: 92vw;
+    background: rgba(18,19,24,0.97); border-right: 1px solid #333;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.5); z-index: 60;
+    display: flex; flex-direction: column;
+    transform: translateX(-104%); transition: transform 0.22s ease;
+  }
+  #mapBuilder.open { transform: translateX(0); }
+  #mapBuilder .mb-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; border-bottom: 1px solid #2a2a2a; flex: 0 0 auto;
+  }
+  #mapBuilder .mb-title { font-size: 14px; font-weight: 600; color: #4ec9d6; }
+  #mapBuilder .mb-close {
+    background: none; border: none; color: #aaa; font-size: 22px; cursor: pointer;
+    line-height: 1; padding: 0 4px;
+  }
+  #mapBuilder .mb-close:hover { color: #fff; }
+  #mapBuilder .mb-body { overflow-y: auto; padding: 12px 14px; flex: 1 1 auto; }
+  #mapBuilder .mb-sec { margin-bottom: 16px; }
+  #mapBuilder .mb-sec-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 8px; }
+  #mapBuilder .mb-snaps { display: flex; gap: 10px; margin: 6px 0; flex-wrap: wrap; }
+  #mapBuilder .mb-list { max-height: 220px; overflow-y: auto; border: 1px solid #2a2a2a; border-radius: 5px; margin: 6px 0; }
+  #mapBuilder .mb-asset {
+    display: flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 12px;
+    border-bottom: 1px solid #232323; cursor: pointer;
+  }
+  #mapBuilder .mb-asset:last-child { border-bottom: none; }
+  #mapBuilder .mb-asset.sel { background: rgba(78,201,214,0.16); }
+  #mapBuilder .mb-asset .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mapBuilder .mb-asset .eye, #mapBuilder .mb-asset .dup, #mapBuilder .mb-asset .del { color: #888; padding: 0 3px; }
+  #mapBuilder .mb-asset .eye.off { color: #555; }
+  #mapBuilder .mb-asset .dup:hover, #mapBuilder .mb-asset .del:hover, #mapBuilder .mb-asset .eye:hover { color: #fff; }
+  #mapBuilder .mb-io { display: flex; gap: 6px; }
+  #mapBuilder .mb-io .btn { flex: 1; }
+  #mapBuilder .mb-glsl { margin-top: 8px; }
+  #mapBuilder .mb-glsl summary { font-size: 11px; color: #888; cursor: pointer; padding: 2px 0; }
+  #mapBuilder #mbShaderSrc {
+    width: 100%; margin: 6px 0; padding: 6px; background: #0a0a0a; border: 1px solid #333;
+    color: #cde; border-radius: 4px; font-family: monospace; font-size: 11px; resize: vertical;
+  }
+  #mapBuilder .mb-glsl-actions { display: flex; align-items: center; gap: 8px; }
+  #mapBuilder #mbShaderErr { color: #ff7066; font-size: 10px; flex: 1; }
+  #mapBuilder #mbShaderErr.ok { color: #76d678; }
+  #mapBuilder .mb-tabs { display: flex; gap: 4px; padding: 8px 14px 0; flex-wrap: wrap; }
+  #mapBuilder .mb-tab {
+    flex: 1; min-width: 0; padding: 6px 4px; font-size: 10px; border: 1px solid #333;
+    background: #1a1a1a; color: #888; border-radius: 4px; cursor: pointer;
+  }
+  #mapBuilder .mb-tab.active { background: rgba(78,201,214,0.15); color: #4ec9d6; border-color: #4ec9d6; }
+  #mapBuilder .mb-tab-panel { display: none; }
+  #mapBuilder .mb-tab-panel.active { display: block; }
+  #mapBuilder .mb-light-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
+  #mapBuilder .mb-light-grid .btn { font-size: 10px; padding: 5px 4px; }
+  #mapBuilder .mb-light-props { border: 1px solid #2a2a2a; border-radius: 5px; padding: 8px; margin-top: 6px; max-height: 280px; overflow-y: auto; }
+  #mapBuilder .mb-lpath-tl { border: 1px solid #2a2a2a; border-radius: 5px; padding: 6px; margin-top: 8px; }
+  #mapBuilder .mb-lpath-track { position: relative; height: 22px; background: #111; border-radius: 3px; margin: 6px 0; cursor: pointer; }
+  #mapBuilder .mb-lpath-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: #ffb347; pointer-events: none; }
+  #mapBuilder .mb-lpath-tick { position: absolute; top: 2px; width: 8px; height: 18px; margin-left: -4px; background: #ffb347; border-radius: 2px; cursor: ew-resize; opacity: 0.85; }
+  #mapBuilder .mb-lpath-tick.sel { background: #fff; box-shadow: 0 0 6px #ffb347; }
+  #mapBuilder .mb-lpath-keys { max-height: 160px; overflow-y: auto; }
+  #mbFlyJoystick {
+    display: none; position: fixed; left: calc(12px + env(safe-area-inset-left));
+    bottom: calc(100px + env(safe-area-inset-bottom)); z-index: 45;
+    width: 110px; height: 110px; border-radius: 50%;
+    background: rgba(20,20,20,0.55); border: 2px solid rgba(255,255,255,0.15);
+    touch-action: none; user-select: none; backdrop-filter: blur(6px);
+  }
+  #mbFlyJoystick .mb-joy-knob {
+    position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px;
+    border-radius: 50%; background: rgba(78,201,214,0.35); border: 2px solid rgba(78,201,214,0.7);
+    pointer-events: none;
+  }
+  #mbFlyJoystick.show { display: block; }
+  @media (min-width: 821px) { #mbFlyJoystick { display: none !important; } }
 </style>
 <!--
   Loading three.js, JSZip, mp4-muxer, and Bullet Physics (Ammo.js WASM) from local ./vendor/ (no CDN).
@@ -683,12 +983,153 @@
 </script>
 </head>
 <body>
+<button id="mobileMenuBtn" aria-label="Toggle controls" title="Controls">☰</button>
+<button id="mobilePlayBtn" aria-label="Play / pause" title="Play / pause">▶</button>
+<div id="mobileBackdrop"></div>
+<div id="castSplash">
+  <div class="card">
+    <div class="cast-ico">👥</div>
+    <h2 id="castTitle">Multi-character animation detected</h2>
+    <p class="sub" id="castSub">This motion set looks like it's made for several characters.</p>
+    <div id="castSlots"></div>
+    <div class="cast-actions">
+      <button class="btn primary" id="castAddBtn">➕ Add model / .zip</button>
+      <button class="btn ghost" id="castDismissBtn">Not now</button>
+    </div>
+  </div>
+</div>
+<div id="mapBuilder">
+  <div class="mb-head">
+    <span class="mb-title">🗺️ Map Builder</span>
+    <button class="mb-close" id="mbClose" title="Close">×</button>
+  </div>
+  <div class="mb-body">
+    <div class="mb-tabs">
+      <button class="mb-tab active" data-mbtab="assets" type="button">Assets</button>
+      <button class="mb-tab" data-mbtab="lights" type="button">💡 Lights</button>
+      <button class="mb-tab" data-mbtab="fly" type="button">✈ Fly</button>
+      <button class="mb-tab" data-mbtab="loc" type="button">Backdrop</button>
+    </div>
+    <div class="mb-tab-panel active" data-mbtab="assets">
+    <div class="mb-sec">
+      <div class="mb-sec-title">Location assets</div>
+      <button class="btn primary" id="mbImport" style="width:100%;">+ Import files / .zip</button>
+      <button class="btn" id="mbImportFolder" style="width:100%;margin-top:4px;">📁 Import folder (textures auto-linked)</button>
+      <div class="note" id="mbImportStatus" style="margin-top:4px;">Supports .pmx .pmd .glb .gltf .obj + textures (.png .jpg .mtl …) from the same folder or zip.</div>
+      <div class="scene-tool-row" style="margin-top:6px;">
+        <button class="btn active" id="mbMove" title="Move (G)">Move G</button>
+        <button class="btn" id="mbRot" title="Rotate (R)">Rotate R</button>
+        <button class="btn" id="mbScale" title="Scale (S)">Scale S</button>
+      </div>
+      <div class="mb-snaps">
+        <label class="check-row"><input type="checkbox" id="mbGridSnap"> Grid snap (0.5)</label>
+        <label class="check-row"><input type="checkbox" id="mbGroundSnap"> Snap to ground</label>
+      </div>
+      <div class="mb-list" id="mbAssetList">
+        <div class="note" style="text-align:center;padding:8px;">No location assets yet — import one above.</div>
+      </div>
+      <div class="mb-io">
+        <button class="btn" id="mbSaveMap">💾 Save map</button>
+        <button class="btn" id="mbLoadMap">📂 Load map</button>
+      </div>
+    </div>
+    </div>
+    <div class="mb-tab-panel" data-mbtab="lights">
+    <div class="mb-sec">
+      <div class="mb-sec-title">Map lighting</div>
+      <div class="note">Lights cast shadows on imported textures. Select a light to edit or animate.</div>
+      <div class="mb-light-grid">
+        <button class="btn" id="mbAddPoint" type="button">● Point</button>
+        <button class="btn" id="mbAddSpot" type="button">◉ Spot</button>
+        <button class="btn" id="mbAddProjector" type="button">🎥 Projector</button>
+        <button class="btn" id="mbAddNeon" type="button">💠 Neon</button>
+        <button class="btn" id="mbAddTube" type="button">━ Tube</button>
+        <button class="btn" id="mbAddDir" type="button">☀ Sun</button>
+        <button class="btn" id="mbAddHemi" type="button">🌐 Hemi</button>
+        <button class="btn" id="mbAddArea" type="button">▭ Area</button>
+      </div>
+      <div class="mb-list" id="mbLightList">
+        <div class="note" style="text-align:center;padding:8px;">No map lights — add one above.</div>
+      </div>
+      <div class="mb-light-props" id="mbLightProps">
+        <div class="note" style="text-align:center;padding:4px;">Select a light to edit parameters.</div>
+      </div>
+      <div class="mb-lpath-tl">
+        <div class="mb-sec-title" style="margin-bottom:4px;">Light path (keyframes)</div>
+        <label class="check-row"><input type="checkbox" id="mbLightPathEdit"> Edit path in 3D</label>
+        <div class="row" style="margin-top:4px;">
+          <button class="btn tl-btn primary" id="mbLightAddKey" type="button">+ Key</button>
+          <button class="btn tl-btn" id="mbLightPlay" type="button">▶</button>
+          <span class="note" id="mbLightPathTime" style="flex:1;text-align:right;">0.00 / 30.00 s</span>
+        </div>
+        <div class="mb-lpath-track" id="mbLightPathTrack">
+          <div class="mb-lpath-marker" id="mbLightPathMarker" style="left:0"></div>
+        </div>
+        <div class="mb-lpath-keys" id="mbLightPathList"></div>
+      </div>
+    </div>
+    </div>
+    <div class="mb-tab-panel" data-mbtab="fly">
+    <div class="mb-sec">
+      <div class="mb-sec-title">Flight mode</div>
+      <label class="check-row"><input type="checkbox" id="mbFlyMode"> Enable WASD flight (<b>F</b> toggles anywhere)</label>
+      <div class="note"><b>F</b> — toggle flight · W/S forward/back · A/D strafe · Q/E down/up · Shift boost · LMB — look around</div>
+      <div class="row"><label class="lbl">Speed</label>
+        <input type="range" id="mbFlySpeed" min="4" max="120" step="1" value="28">
+        <input class="val" id="mbFlySpeedV" value="28">
+      </div>
+      <div class="row"><label class="lbl">Look sens.</label>
+        <input type="range" id="mbFlyLook" min="0.1" max="2" step="0.05" value="0.6">
+        <input class="val" id="mbFlyLookV" value="0.60">
+      </div>
+      <div class="note" style="margin-top:6px;">On mobile: left joystick moves, drag right side of screen to look.</div>
+    </div>
+    </div>
+    <div class="mb-tab-panel" data-mbtab="loc">
+    <div class="mb-sec">
+      <div class="mb-sec-title">Location backdrop (shader)</div>
+      <label class="check-row"><input type="checkbox" id="mbLocOn"> Use location backdrop (replaces sky)</label>
+      <div class="row"><label class="lbl">Preset</label>
+        <select id="mbLocPreset" style="flex:1;min-width:0;">
+          <option value="gradient">Gradient studio</option>
+          <option value="sunset">Sunset</option>
+          <option value="starfield">Starfield</option>
+          <option value="nebula">Nebula</option>
+          <option value="grid">Neon grid</option>
+          <option value="custom">Custom (edit below)</option>
+        </select>
+      </div>
+      <div class="row"><label class="lbl">Color A</label><input type="color" id="mbLocColA" value="#1b2a4a"></div>
+      <div class="row"><label class="lbl">Color B</label><input type="color" id="mbLocColB" value="#0a0a12"></div>
+      <div class="row"><label class="lbl">Speed</label>
+        <input type="range" id="mbLocSpeed" min="0" max="3" step="0.01" value="1">
+        <input class="val" id="mbLocSpeedV" value="1.00">
+      </div>
+      <div class="row"><label class="lbl">Intensity</label>
+        <input type="range" id="mbLocInt" min="0" max="3" step="0.01" value="1">
+        <input class="val" id="mbLocIntV" value="1.00">
+      </div>
+      <label class="check-row"><input type="checkbox" id="mbLocEnvTint" checked> Tint fog &amp; ambient to match</label>
+      <details class="mb-glsl">
+        <summary>Custom GLSL (fragment)</summary>
+        <div class="note">Uniforms: <code>uTime</code>, <code>uResolution</code>, <code>uCamDir</code>, <code>uColorA</code>, <code>uColorB</code>, <code>uSpeed</code>, <code>uIntensity</code>. Write <code>vec3 background(vec3 dir)</code> returning color; <code>dir</code> is the view ray.</div>
+        <textarea id="mbShaderSrc" spellcheck="false" rows="12"></textarea>
+        <div class="mb-glsl-actions">
+          <button class="btn primary" id="mbCompile">Compile</button>
+          <span class="note" id="mbShaderErr"></span>
+        </div>
+      </details>
+    </div>
+    </div>
+  </div>
+</div>
 <div id="app">
   <div id="stage">
-    <div id="hud">FPS: <span id="fps">—</span> · Tris: <span id="tri">0</span></div>
+    <div id="hud">FPS: <span id="fps">—</span> · Tris: <span id="tri">0</span> · <span id="perfBadge" title="Auto performance: dynamically lowers render resolution when FPS drops. Click to toggle." style="cursor:pointer;user-select:none">⚙ Auto 100%</span></div>
     <div id="cinHud"></div>
-    <div id="help">LMB: orbit · RMB: pan · scroll: zoom · <b>G/R/S</b> move/rotate/scale · <b>K</b> keyframe · drag-drop files</div>
-    <div id="letterbox"></div>
+    <div id="help">LMB: orbit · RMB: pan · scroll: zoom · <b>G/R/S</b> move/rotate/scale · <b>K</b> keyframe · <b>F</b> flight · drag-drop files</div>
+    <div id="mbFlyJoystick" aria-hidden="true"><div class="mb-joy-knob"></div></div>
+    <div id="letterbox"><div class="lb-bar lb-top"></div><div class="lb-bar lb-bottom"></div><div class="lb-bar lb-left"></div><div class="lb-bar lb-right"></div></div>
     <div id="drophint">
       <div class="box">
         <b>Drop your MMD files here</b><br>
@@ -1166,7 +1607,7 @@
       <summary>Bone animation</summary>
       <div class="body">
         <label class="check-row"><input type="checkbox" id="cBoneEdit"> Enable bone editor (3D)</label>
-        <div class="note" style="margin-bottom:6px;">Click bone in list or on model · G/R/S move/rotate/scale in 3D · I key bone · P full pose</div>
+        <div class="note" style="margin-bottom:6px;">Click a green joint on the model to select · G/R/S move/rotate/scale in 3D · I key bone · P full pose</div>
         <div class="scene-tool-row">
           <button class="btn" id="btnBoneMove" title="Move (G)">Move G</button>
           <button class="btn active" id="btnBoneRot" title="Rotate (R)">Rotate R</button>
@@ -1189,12 +1630,15 @@
           <input type="range" id="rBoneOtherOp" min="0.05" max="1" step="0.01" value="0.45">
           <input class="val" id="vBoneOtherOp" value="0.45">
         </div>
-        <input type="text" id="boneFilter" placeholder="Search bones…" style="width:100%;margin-bottom:4px;padding:4px 6px;background:#0a0a0a;border:1px solid #333;color:#ddd;border-radius:3px;font-size:11px;">
-        <button class="btn" id="btnBoneExplorer" style="width:100%;margin-bottom:6px;">🦴 Open skeleton map</button>
         <div class="scene-tool-row" id="bonePresets"></div>
-        <div class="bone-list" id="boneList">
-          <div class="note" style="padding:8px;text-align:center;">Load a model first</div>
-        </div>
+        <details id="boneListAdvanced" style="margin-bottom:6px;">
+          <summary style="font-size:11px;color:#888;cursor:pointer;padding:2px 0;">Bone name list (advanced)</summary>
+          <input type="text" id="boneFilter" placeholder="Search bones…" style="width:100%;margin:4px 0;padding:4px 6px;background:#0a0a0a;border:1px solid #333;color:#ddd;border-radius:3px;font-size:11px;">
+          <button class="btn" id="btnBoneExplorer" style="width:100%;margin-bottom:6px;">🦴 Open skeleton map</button>
+          <div class="bone-list" id="boneList">
+            <div class="note" style="padding:8px;text-align:center;">Load a model first</div>
+          </div>
+        </details>
         <div id="boneProps">
           <div class="note" style="text-align:center;padding:4px;">Select a bone to edit X/Y/Z in 3D</div>
         </div>
@@ -1252,14 +1696,39 @@
     </details>
 
     <details open>
+      <summary>Location / Build map</summary>
+      <div class="body">
+        <button class="btn primary" id="btnOpenMapBuilder" style="width:100%;">🗺️ Open Map Builder</button>
+        <div class="note">Import .pmx / .glb / .obj location assets and arrange them. Backdrop shaders (presets + custom GLSL) live in the builder window too.</div>
+      </div>
+    </details>
+
+    <details open>
       <summary>Cinematic camera</summary>
       <div class="body">
+        <h3 style="margin-top:0;">Camera motion (.vmd)</h3>
+        <div class="file-row">
+          <button class="btn primary" id="btnPickCamVmd">🎥 Add camera .vmd</button>
+          <button class="btn" id="btnClearCamVmd" disabled>Clear</button>
+        </div>
+        <div class="file-row" id="camVmdLibRow" style="display:none;">
+          <select id="camVmdLibSel" style="flex:1; min-width:0;"></select>
+          <button class="btn" id="btnUseCamVmdLib" title="Use this camera motion from loaded files">Use</button>
+        </div>
+        <label class="check-row"><input type="checkbox" id="cCamVmdOn"> Use imported camera motion</label>
+        <div class="note" id="camVmdName" style="margin:2px 0 8px;">— no camera motion —</div>
         <label class="check-row"><input type="checkbox" id="cCamCine" checked> Cinematic smoothing</label>
         <label class="check-row"><input type="checkbox" id="cCamLivePath"> Live path preview (play / scrub only)</label>
         <label class="check-row"><input type="checkbox" id="cCamSyncTL" checked> Sync to VMD animation (when loaded)</label>
         <label class="check-row"><input type="checkbox" id="cCamEditPath"> Edit path in 3D (Blender-style)</label>
         <label class="check-row"><input type="checkbox" id="cHidePathVisuals"> Hide path overlays in viewport</label>
-        <label class="check-row"><input type="checkbox" id="cCamLetterbox"> Letterbox (2.39:1)</label>
+        <label class="check-row"><input type="checkbox" id="cCamLetterbox"> Letterbox frame</label>
+        <div class="row"><label class="lbl">Aspect W:H</label>
+          <input class="val" id="vAspectW" value="239" style="width:44px" title="Frame width ratio">
+          <span class="note">:</span>
+          <input class="val" id="vAspectH" value="100" style="width:44px" title="Frame height ratio">
+        </div>
+        <div class="note">Examples: 16:9 · 21:9 · 239:100 (cinematic)</div>
         <div class="row"><label class="lbl">Move damp</label>
           <input type="range" id="rCamDamp" min="0.02" max="0.35" step="0.005" value="0.08">
           <input class="val" id="vCamDamp" value="0.080">
@@ -1267,6 +1736,32 @@
         <div class="row"><label class="lbl">Look damp</label>
           <input type="range" id="rCamLook" min="0.02" max="0.35" step="0.005" value="0.065">
           <input class="val" id="vCamLook" value="0.065">
+        </div>
+        <h3 style="margin:10px 0 4px;font-size:12px;color:#888;">Camera control</h3>
+        <div class="row"><label class="lbl">Shake amt</label>
+          <input type="range" id="rCamShake" min="0" max="2" step="0.01" value="0">
+          <input class="val" id="vCamShake" value="0.00">
+        </div>
+        <div class="row"><label class="lbl">Shake freq</label>
+          <input type="range" id="rCamShakeF" min="1" max="20" step="0.1" value="8">
+          <input class="val" id="vCamShakeF" value="8.0">
+        </div>
+        <label class="check-row"><input type="checkbox" id="cCamInertia" checked> Manual inertia (damping)</label>
+        <div class="row"><label class="lbl">Inertia</label>
+          <input type="range" id="rCamInertia" min="0.01" max="0.2" step="0.005" value="0.06">
+          <input class="val" id="vCamInertia" value="0.060">
+        </div>
+        <div class="row"><label class="lbl">Orbit speed</label>
+          <input type="range" id="rCamOrbit" min="0.2" max="3" step="0.05" value="1">
+          <input class="val" id="vCamOrbit" value="1.00">
+        </div>
+        <div class="row"><label class="lbl">Zoom speed</label>
+          <input type="range" id="rCamZoom" min="0.2" max="3" step="0.05" value="1">
+          <input class="val" id="vCamZoom" value="1.00">
+        </div>
+        <div class="row"><label class="lbl">Pan speed</label>
+          <input type="range" id="rCamPan" min="0.2" max="3" step="0.05" value="1">
+          <input class="val" id="vCamPan" value="1.00">
         </div>
         <div class="row"><label class="lbl">Timeline length</label>
           <input type="range" id="rCamDur" min="5" max="3600" step="1" value="30">
@@ -1377,6 +1872,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { createCharacterMotionSystem } from './mmd-character-motion.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
@@ -1393,6 +1891,10 @@ import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
 import { TAARenderPass }  from 'three/addons/postprocessing/TAARenderPass.js';
 import { FXAAShader }     from 'three/addons/shaders/FXAAShader.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { RectAreaLightHelper } from 'three/addons/helpers/RectAreaLightHelper.js';
+
+RectAreaLightUniformsLib.init();
 
 // ---------------------------------------------------------------------------
 // Filter MMDParser Shift-JIS "unknown char code" messages. Harmless metadata
@@ -1417,6 +1919,8 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 // DOM
 // =================================================================
 const stageEl = document.getElementById('stage');
+const letterboxEl = document.getElementById('letterbox');
+let _cinReady = false;
 const errEl = document.getElementById('error');
 const fpsEl = document.getElementById('fps');
 const triEl = document.getElementById('tri');
@@ -1743,7 +2247,7 @@ function refreshSceneOutliner() {
     const div = document.createElement('div');
     div.className = 'scene-out-item' + (entry.id === sceneSelectedId ? ' sel' : '');
     const typeLabel = {
-      model: 'model', prop: 'empty',
+      model: 'model', prop: 'empty', mapprop: 'location',
       light_point: 'point', light_spot: 'spot',
       light_directional: 'sun', light_hemi: 'hemi',
     }[entry.type] || entry.type;
@@ -1776,10 +2280,12 @@ function refreshScenePropsUI() {
   html += `<div class="row"><label class="lbl">Pos</label><span class="note">${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}</span></div>`;
   html += `<div class="row"><label class="lbl">Rot°</label><span class="note">${THREE.MathUtils.radToDeg(r.x).toFixed(0)}, ${THREE.MathUtils.radToDeg(r.y).toFixed(0)}, ${THREE.MathUtils.radToDeg(r.z).toFixed(0)}</span></div>`;
   if (entry.type !== 'model') {
-    html += `<div class="row"><label class="lbl">Scale</label><span class="note">${s.x.toFixed(2)}, ${s.y.toFixed(2)}, ${s.z.toFixed(2)}</span></div>`;
+    const fmtS = v => (Math.abs(v) < 0.01 ? v.toExponential(2) : v.toFixed(2));
+    html += `<div class="row"><label class="lbl">Scale</label><span class="note">${fmtS(s.x)}, ${fmtS(s.y)}, ${fmtS(s.z)}</span></div>`;
   }
   if (entry.light) {
-    html += `<div class="row"><label class="lbl">Intensity</label><input type="range" id="scLightInt" min="0" max="10" step="0.05" value="${entry.light.intensity}"><input class="val" id="scLightIntV" value="${entry.light.intensity.toFixed(2)}"></div>`;
+    const S = MAP_LIGHT_SLIDER_MAX;
+    html += `<div class="row"><label class="lbl">Intensity</label><input type="range" id="scLightInt" min="0" max="${S}" step="0.5" value="${sliderVal(entry.light.intensity)}"><input class="val" id="scLightIntV" type="number" min="0" step="0.1" value="${entry.light.intensity}"></div>`;
     html += `<div class="row"><label class="lbl">Color</label><input type="color" id="scLightCol" value="#${entry.light.color.getHexString()}"></div>`;
     if ('distance' in entry.light && entry.light.distance > 0) {
       html += `<div class="row"><label class="lbl">Distance</label><input type="range" id="scLightDist" min="1" max="80" step="0.5" value="${entry.light.distance}"><input class="val" id="scLightDistV" value="${entry.light.distance.toFixed(1)}"></div>`;
@@ -1792,15 +2298,11 @@ function refreshScenePropsUI() {
   box.innerHTML = html;
   if (entry.light) {
     const syncInt = (v) => { entry.light.intensity = v; if (entry.helper?.update) entry.helper.update(); };
-    const rEl = document.getElementById('scLightInt');
-    const vEl = document.getElementById('scLightIntV');
-    if (rEl) rEl.oninput = () => { vEl.value = rEl.value; syncInt(parseFloat(rEl.value)); };
+    bindLightParamSlider('scLightInt', 'scLightIntV', syncInt, fmtLightNum);
     document.getElementById('scLightCol')?.addEventListener('input', e => { entry.light.color.set(e.target.value); if (entry.helper?.update) entry.helper.update(); });
     document.getElementById('scLightSh')?.addEventListener('change', e => { entry.light.castShadow = e.target.checked; });
-    const dEl = document.getElementById('scLightDist');
-    if (dEl) dEl.oninput = () => { entry.light.distance = parseFloat(dEl.value); document.getElementById('scLightDistV').value = dEl.value; };
-    const aEl = document.getElementById('scSpotAng');
-    if (aEl) aEl.oninput = () => { entry.light.angle = parseFloat(aEl.value); document.getElementById('scSpotAngV').value = aEl.value; if (entry.helper?.update) entry.helper.update(); };
+    if (document.getElementById('scLightDist')) bindBoundedSlider('scLightDist', 'scLightDistV', v => { entry.light.distance = v; }, v => Number(v).toFixed(1));
+    if (document.getElementById('scSpotAng')) bindBoundedSlider('scSpotAng', 'scSpotAngV', v => { entry.light.angle = v; if (entry.helper?.update) entry.helper.update(); }, v => Number(v).toFixed(2));
   }
 }
 
@@ -1839,6 +2341,10 @@ function refreshSceneTransformAttach() {
     selectPathKey(CIN.selectedKey, CIN.selectedHandle);
     return;
   }
+  if (MAP.editLightPath && MAP.selectedLightKey >= 0 && lightKeyHandles[MAP.selectedLightKey] && shouldShowMapLightPath()) {
+    selectMapLightPathKey(MAP.selectedLightKey, MAP.selectedLightHandle || 'pos');
+    return;
+  }
   if (!isKeyHandle) {
     transformControls.detach();
     transformControls.visible = false;
@@ -1847,9 +2353,16 @@ function refreshSceneTransformAttach() {
 
 function selectSceneObject(id) {
   sceneSelectedId = id;
+  const entry = SCENE_OBJECTS.get(id);
+  if (entry?.mapLight) MAP.activeLightId = id;
   refreshSceneOutliner();
   refreshScenePropsUI();
   refreshSceneTransformAttach();
+  if (mapBuilderEl?.classList.contains('open')) {
+    refreshMapLightList();
+    refreshMapLightPropsUI();
+    rebuildMapLightPathVisuals();
+  }
 }
 
 function registerModelObject(mesh, name, sceneId = MODEL_SCENE_ID) {
@@ -1883,6 +2396,21 @@ function deleteSceneObject(id) {
   if (entry.object3d) {
     if (entry.object3d.parent) entry.object3d.parent.remove(entry.object3d);
     if (entry.light?.target && entry.target) entry.light.target = null;
+    // Imported location assets own real geometry/textures — free the GPU memory.
+    if (entry.type === 'mapprop') {
+      entry.object3d.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach(m => {
+            for (const k of ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap','alphaMap','bumpMap']) {
+              if (m[k]?.dispose) m[k].dispose();
+            }
+            m.dispose?.();
+          });
+        }
+      });
+    }
   }
   if (entry.light?.target && entry.target?.parent) entry.target.parent.remove(entry.target);
   SCENE_OBJECTS.delete(id);
@@ -1890,6 +2418,7 @@ function deleteSceneObject(id) {
   refreshSceneOutliner();
   refreshScenePropsUI();
   refreshSceneTransformAttach();
+  if (entry.type === 'mapprop') { refreshMapAssetList(); countTris(); }
 }
 
 function createSceneLight(type) {
@@ -1897,7 +2426,7 @@ function createSceneLight(type) {
   let entry;
   switch (type) {
     case 'point': {
-      const light = new THREE.PointLight(0xfff0dd, 2.5, 28, 1.4);
+      const light = new THREE.PointLight(0xfff0dd, 40, 45, 1.5);
       light.position.set(3, 7, 4);
       light.castShadow = true;
       light.shadow.mapSize.set(1024, 1024);
@@ -1911,7 +2440,7 @@ function createSceneLight(type) {
     }
     case 'spot': {
       const rig = new THREE.Group();
-      const light = new THREE.SpotLight(0xffffff, 5, 40, Math.PI / 8, 0.4, 1.5);
+      const light = new THREE.SpotLight(0xffffff, 80, 40, Math.PI / 8, 0.4, 1.5);
       const target = new THREE.Object3D();
       target.position.set(0, 0, -8);
       rig.add(light);
@@ -1928,7 +2457,7 @@ function createSceneLight(type) {
     }
     case 'directional': {
       const rig = new THREE.Group();
-      const light = new THREE.DirectionalLight(0xfff2dd, 2.0);
+      const light = new THREE.DirectionalLight(0xfff2dd, 25);
       light.castShadow = true;
       light.shadow.mapSize.set(2048, 2048);
       light.shadow.camera.near = 0.5;
@@ -1949,7 +2478,7 @@ function createSceneLight(type) {
       break;
     }
     case 'hemisphere': {
-      const light = new THREE.HemisphereLight(0xaabbff, 0x443322, 0.55);
+      const light = new THREE.HemisphereLight(0xaabbff, 0x443322, 8);
       light.position.set(0, 14, 0);
       userLightsRoot.add(light);
       const helper = new THREE.HemisphereLightHelper(light, 0.55);
@@ -2004,8 +2533,11 @@ function pickSceneObjectFromEvent(e) {
     if (entry.visible === false || !entry.object3d) return;
     if (entry.helper && shouldShowEditorHelpers()) pickables.push(entry.helper);
     if (entry.type === 'model') pickables.push(entry.object3d);
-    else if (entry.type === 'prop') pickables.push(entry.object3d);
+    else if (entry.type === 'prop' || entry.type === 'mapprop') pickables.push(entry.object3d);
     else if (entry.type.startsWith('light_') && !entry.helper) pickables.push(entry.object3d);
+    else if (entry.mapLight && entry.object3d) {
+      entry.object3d.traverse(c => { if (c.userData?.pickProxy || c.isLight) pickables.push(c); });
+    }
   });
   const hits = _ray.intersectObjects(pickables, true);
   for (const h of hits) {
@@ -2024,11 +2556,1018 @@ function updateSceneEditorHelpers() {
   });
 }
 
+const _mapBBox = new THREE.Box3();
 function onSceneObjectTransformChanged() {
   const entry = sceneSelectedId ? SCENE_OBJECTS.get(sceneSelectedId) : null;
+  // Ground snap: rest a location prop's lowest point on the floor (y=0).
+  if (entry?.type === 'mapprop' && document.getElementById('mbGroundSnap')?.checked && sceneTransformMode === 'translate') {
+    _mapBBox.setFromObject(entry.object3d);
+    if (isFinite(_mapBBox.min.y)) entry.object3d.position.y -= _mapBBox.min.y;
+  }
   if (entry?.helper?.update) entry.helper.update();
+  if (entry?.mapLight && entry.pathKeys?.length && MAP.selectedLightKey >= 0) {
+    const k = entry.pathKeys[MAP.selectedLightKey];
+    if (k) {
+      Object.assign(k, snapshotLightKey(entry, k.t));
+      updateMapLightPathLine(entry.pathKeys);
+      saveMapLightPaths();
+    }
+  }
   refreshScenePropsUI();
+  if (entry?.mapLight && mapBuilderEl?.classList.contains('open')) refreshMapLightPropsUI();
 }
+
+// =================================================================
+// BUILD MAP MODE (dedicated window) + LOCATION BACKDROP SHADERS
+// =================================================================
+const mapBuilderEl = document.getElementById('mapBuilder');
+
+function openMapBuilder() {
+  mapBuilderEl?.classList.add('open');
+  if (!sceneEditorEnabled) {
+    sceneEditorEnabled = true;
+    const cb = document.getElementById('cSceneEditor');
+    if (cb) cb.checked = true;
+    stageEl.classList.add('scene-editor');
+  }
+  refreshMapAssetList();
+  refreshMapLightList();
+  refreshMapLightPropsUI();
+  loadMapLightPaths();
+  rebuildMapLightPathVisuals();
+  syncMapFlyUI();
+  const gs = document.getElementById('mbGridSnap')?.checked;
+  transformControls.setTranslationSnap(gs ? 0.5 : null);
+  transformControls.setRotationSnap(gs ? THREE.MathUtils.degToRad(15) : null);
+  mapLightEntries().forEach(e => { if (e.light?.castShadow) configureMapLightShadows(e.light); });
+}
+function closeMapBuilder() {
+  mapBuilderEl?.classList.remove('open');
+  MAP.lightPathPlaying = false;
+  MAP.editLightPath = false;
+  mapLightPathRoot.visible = false;
+  transformControls.setTranslationSnap(null);
+  transformControls.setRotationSnap(null);
+}
+
+// ---- Map Builder: flight, extended lights, light paths ----
+const MAP_LIGHT_PATH_KEY = 'mmd_rtx_maplightpath_v1';
+const MAP = {
+  flyMode: false,
+  flySpeed: 28,
+  flyLook: 0.6,
+  flyBoost: 2.8,
+  keys: { w: false, a: false, s: false, d: false, q: false, e: false, shift: false },
+  joyX: 0, joyY: 0,
+  flyYaw: 0,
+  flyPitch: 0,
+  flyLookDrag: false,
+  editLightPath: false,
+  lightPathPlaying: false,
+  lightPathTime: 0,
+  lightPathDuration: 30,
+  lightPathLoop: true,
+  selectedLightKey: -1,
+  selectedLightHandle: 'pos',
+  activeLightId: null,
+};
+
+const mapLightPathRoot = new THREE.Group();
+mapLightPathRoot.name = 'mapLightPath';
+scene.add(mapLightPathRoot);
+const lightPathSplineLine = new THREE.Line(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.85 })
+);
+const lightPathTargetLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: 0xff8844, transparent: true, opacity: 0.45 })
+);
+mapLightPathRoot.add(lightPathSplineLine);
+mapLightPathRoot.add(lightPathTargetLines);
+const lightKeyGeo = new THREE.SphereGeometry(0.35, 10, 10);
+const lightKeyMat = new THREE.MeshBasicMaterial({ color: 0xffb347, depthTest: false, transparent: true, opacity: 0.92 });
+const lightTgtGeo = new THREE.SphereGeometry(0.22, 8, 8);
+const lightTgtMat = new THREE.MeshBasicMaterial({ color: 0xff6622, depthTest: false, transparent: true, opacity: 0.85 });
+const lightKeyHandles = [];
+
+function mapLightEntries() {
+  return [...SCENE_OBJECTS.values()].filter(e => e.mapLight && e.light);
+}
+
+function getMapSceneBounds() {
+  const box = new THREE.Box3();
+  mapPropEntries().forEach(e => { if (e.object3d) box.expandByObject(e.object3d); });
+  if (box.isEmpty()) box.set(new THREE.Vector3(-20, 0, -20), new THREE.Vector3(20, 25, 20));
+  return box;
+}
+
+function configureMapLightShadows(light) {
+  if (!light?.castShadow) return;
+  light.shadow.mapSize.set(2048, 2048);
+  light.shadow.bias = -0.0002;
+  light.shadow.normalBias = 0.02;
+  light.shadow.radius = 2;
+  const box = getMapSceneBounds();
+  const center = box.getCenter(new THREE.Vector3());
+  const pad = Math.max(box.getSize(new THREE.Vector3()).length() * 0.55, 12);
+  const cam = light.shadow?.camera;
+  if (cam?.isOrthographicCamera) {
+    cam.left = -pad; cam.right = pad; cam.bottom = -pad; cam.top = pad;
+    cam.near = 0.5; cam.far = pad * 5;
+    cam.updateProjectionMatrix();
+  } else if (cam?.isPerspectiveCamera) {
+    cam.near = 0.5; cam.far = pad * 6;
+    cam.updateProjectionMatrix();
+  }
+  if (light.target) light.target.position.copy(center);
+}
+
+function addNeonBulb(parent, color) {
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 10, 10),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
+  );
+  bulb.userData.pickProxy = true;
+  parent.add(bulb);
+  return bulb;
+}
+
+function createMapLight(type) {
+  const id = genSceneId();
+  let entry;
+  const box = getMapSceneBounds();
+  const center = box.getCenter(new THREE.Vector3());
+  const y = Math.max(center.y + 6, 8);
+  switch (type) {
+    case 'point': {
+      const light = new THREE.PointLight(0xfff0dd, 40, 45, 1.5);
+      light.position.set(center.x + 4, y, center.z + 3);
+      light.castShadow = true;
+      configureMapLightShadows(light);
+      userLightsRoot.add(light);
+      const helper = new THREE.PointLightHelper(light, 0.5);
+      helper.userData.sceneObjId = id;
+      editorHelpersRoot.add(helper);
+      light.userData.sceneObjId = id;
+      entry = { id, name: `Point ${sceneObjCounter}`, type: 'light_point', object3d: light, light, helper, visible: true, mapLight: true, pathKeys: [] };
+      break;
+    }
+    case 'spot': {
+      const rig = new THREE.Group();
+      const light = new THREE.SpotLight(0xffffff, 80, 55, Math.PI / 7, 0.35, 1.2);
+      const target = new THREE.Object3D();
+      target.position.set(center.x, center.y, center.z);
+      rig.add(light); rig.add(target);
+      light.target = target;
+      rig.position.set(center.x, y + 4, center.z + 6);
+      light.castShadow = true;
+      configureMapLightShadows(light);
+      userLightsRoot.add(rig);
+      const helper = new THREE.SpotLightHelper(light);
+      helper.userData.sceneObjId = id;
+      editorHelpersRoot.add(helper);
+      rig.userData.sceneObjId = id;
+      entry = { id, name: `Spot ${sceneObjCounter}`, type: 'light_spot', object3d: rig, light, target, helper, visible: true, mapLight: true, pathKeys: [] };
+      break;
+    }
+    case 'projector': {
+      const rig = new THREE.Group();
+      const light = new THREE.SpotLight(0xffffff, 180, 70, Math.PI / 12, 0.08, 1.8);
+      const target = new THREE.Object3D();
+      target.position.set(center.x, center.y + 2, center.z);
+      rig.add(light); rig.add(target);
+      light.target = target;
+      rig.position.set(center.x - 5, y + 8, center.z + 10);
+      light.castShadow = true;
+      configureMapLightShadows(light);
+      userLightsRoot.add(rig);
+      const helper = new THREE.SpotLightHelper(light);
+      helper.userData.sceneObjId = id;
+      editorHelpersRoot.add(helper);
+      rig.userData.sceneObjId = id;
+      entry = { id, name: `Projector ${sceneObjCounter}`, type: 'light_spot', object3d: rig, light, target, helper, visible: true, mapLight: true, mapLightKind: 'projector', pathKeys: [] };
+      break;
+    }
+    case 'neon': {
+      const rig = new THREE.Group();
+      const col = new THREE.Color(0x00ffcc);
+      const light = new THREE.PointLight(col, 55, 22, 2);
+      light.position.set(0, 0, 0);
+      light.castShadow = true;
+      configureMapLightShadows(light);
+      addNeonBulb(rig, col);
+      rig.position.set(center.x, y - 2, center.z);
+      userLightsRoot.add(rig);
+      rig.add(light);
+      const helper = new THREE.PointLightHelper(light, 0.35);
+      helper.userData.sceneObjId = id;
+      editorHelpersRoot.add(helper);
+      rig.userData.sceneObjId = id;
+      entry = { id, name: `Neon ${sceneObjCounter}`, type: 'light_point', object3d: rig, light, helper, visible: true, mapLight: true, mapLightKind: 'neon', pathKeys: [] };
+      break;
+    }
+    case 'tube': {
+      const rig = new THREE.Group();
+      const light = new THREE.PointLight(0xaaccff, 45, 35, 1.2);
+      const tube = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.06, 1.8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xaaccff, transparent: true, opacity: 0.85 })
+      );
+      tube.rotation.z = Math.PI / 2;
+      tube.userData.pickProxy = true;
+      rig.add(tube);
+      rig.add(light);
+      rig.position.set(center.x + 2, y, center.z - 2);
+      light.castShadow = true;
+      configureMapLightShadows(light);
+      userLightsRoot.add(rig);
+      const helper = new THREE.PointLightHelper(light, 0.3);
+      helper.userData.sceneObjId = id;
+      editorHelpersRoot.add(helper);
+      rig.userData.sceneObjId = id;
+      entry = { id, name: `Tube ${sceneObjCounter}`, type: 'light_point', object3d: rig, light, helper, visible: true, mapLight: true, mapLightKind: 'tube', pathKeys: [] };
+      break;
+    }
+    case 'directional': {
+      const rig = new THREE.Group();
+      const light = new THREE.DirectionalLight(0xfff2dd, 25);
+      light.castShadow = true;
+      const target = new THREE.Object3D();
+      target.position.copy(center);
+      rig.add(light); rig.add(target);
+      light.target = target;
+      rig.position.set(center.x + 10, y + 10, center.z + 8);
+      configureMapLightShadows(light);
+      userLightsRoot.add(rig);
+      const helper = new THREE.DirectionalLightHelper(light, 1);
+      helper.userData.sceneObjId = id;
+      editorHelpersRoot.add(helper);
+      rig.userData.sceneObjId = id;
+      entry = { id, name: `Sun ${sceneObjCounter}`, type: 'light_directional', object3d: rig, light, target, helper, visible: true, mapLight: true, pathKeys: [] };
+      break;
+    }
+    case 'hemisphere': {
+      const light = new THREE.HemisphereLight(0xaabbff, 0x443322, 8);
+      light.position.set(center.x, y + 6, center.z);
+      userLightsRoot.add(light);
+      const helper = new THREE.HemisphereLightHelper(light, 0.7);
+      helper.userData.sceneObjId = id;
+      editorHelpersRoot.add(helper);
+      light.userData.sceneObjId = id;
+      entry = { id, name: `Hemi ${sceneObjCounter}`, type: 'light_hemi', object3d: light, light, helper, visible: true, mapLight: true, pathKeys: [] };
+      break;
+    }
+    case 'area': {
+      const light = new THREE.RectAreaLight(0xffffff, 35, 6, 3);
+      light.position.set(center.x, y, center.z + 4);
+      light.lookAt(center);
+      userLightsRoot.add(light);
+      const helper = new RectAreaLightHelper(light);
+      helper.userData.sceneObjId = id;
+      editorHelpersRoot.add(helper);
+      light.userData.sceneObjId = id;
+      entry = { id, name: `Area ${sceneObjCounter}`, type: 'light_area', object3d: light, light, helper, visible: true, mapLight: true, pathKeys: [] };
+      break;
+    }
+    default: return null;
+  }
+  SCENE_OBJECTS.set(id, entry);
+  MAP.activeLightId = id;
+  if (!sceneEditorEnabled) {
+    sceneEditorEnabled = true;
+    document.getElementById('cSceneEditor').checked = true;
+    stageEl.classList.add('scene-editor');
+  }
+  selectSceneObject(id);
+  syncEditorHelperVisibility();
+  refreshMapLightList();
+  refreshMapLightPropsUI();
+  rebuildMapLightPathVisuals();
+  return entry;
+}
+
+function getActiveMapLightEntry() {
+  if (MAP.activeLightId && SCENE_OBJECTS.get(MAP.activeLightId)?.mapLight) return SCENE_OBJECTS.get(MAP.activeLightId);
+  const sel = sceneSelectedId ? SCENE_OBJECTS.get(sceneSelectedId) : null;
+  return sel?.mapLight ? sel : mapLightEntries()[0] || null;
+}
+
+function getLightWorldPos(entry) {
+  const o = entry.object3d;
+  const p = new THREE.Vector3();
+  if (entry.type === 'light_point' && entry.mapLightKind !== 'neon' && entry.mapLightKind !== 'tube' && o.isPointLight) return o.position.clone();
+  o.getWorldPosition(p);
+  return p;
+}
+
+function getLightWorldTarget(entry) {
+  if (!entry.target) return getLightWorldPos(entry).clone().add(new THREE.Vector3(0, -2, -6));
+  const p = new THREE.Vector3();
+  entry.target.getWorldPosition(p);
+  return p;
+}
+
+function snapshotLightKey(entry, t) {
+  const pos = getLightWorldPos(entry);
+  const target = getLightWorldTarget(entry);
+  return {
+    t,
+    pos: pos.toArray(),
+    target: target.toArray(),
+    intensity: entry.light.intensity,
+    color: '#' + entry.light.color.getHexString(),
+    angle: entry.light.isSpotLight ? entry.light.angle : undefined,
+    penumbra: entry.light.isSpotLight ? entry.light.penumbra : undefined,
+    distance: ('distance' in entry.light && entry.light.distance > 0) ? entry.light.distance : undefined,
+    width: entry.light.isRectAreaLight ? entry.light.width : undefined,
+    height: entry.light.isRectAreaLight ? entry.light.height : undefined,
+    ease: 'smooth',
+    hold: 0,
+  };
+}
+
+function applyLightKeyToEntry(entry, k) {
+  if (!entry?.light || !k) return;
+  const o = entry.object3d;
+  if (o.isPointLight || o.isRectAreaLight || o.isHemisphereLight) {
+    o.position.fromArray(k.pos);
+  } else {
+    o.position.fromArray(k.pos);
+    if (entry.target && k.target) entry.target.position.fromArray(k.target);
+  }
+  entry.light.intensity = k.intensity ?? entry.light.intensity;
+  entry.light.color.set(k.color || '#ffffff');
+  if (entry.light.isSpotLight) {
+    if (k.angle != null) entry.light.angle = k.angle;
+    if (k.penumbra != null) entry.light.penumbra = k.penumbra;
+  }
+  if (k.distance != null && 'distance' in entry.light) entry.light.distance = k.distance;
+  if (entry.light.isRectAreaLight) {
+    if (k.width != null) entry.light.width = k.width;
+    if (k.height != null) entry.light.height = k.height;
+  }
+  if (entry.helper?.update) entry.helper.update();
+}
+
+function refreshMapLightList() {
+  const list = document.getElementById('mbLightList');
+  if (!list) return;
+  const lights = mapLightEntries();
+  list.innerHTML = '';
+  if (lights.length === 0) {
+    list.innerHTML = '<div class="note" style="text-align:center;padding:8px;">No map lights — add one above.</div>';
+    return;
+  }
+  lights.forEach(entry => {
+    const div = document.createElement('div');
+    div.className = 'mb-asset' + (entry.id === (MAP.activeLightId || sceneSelectedId) ? ' sel' : '');
+    const icon = entry.mapLightKind === 'neon' ? '💠' : entry.mapLightKind === 'projector' ? '🎥' : entry.type.includes('spot') ? '◉' : '●';
+    div.innerHTML = `<span class="eye${entry.visible === false ? ' off' : ''}">${entry.visible === false ? '○' : '●'}</span>`
+      + `<span class="nm" title="${escapeHtml(entry.name)}">${icon} ${escapeHtml(entry.name)}</span>`
+      + `<span class="del" title="Delete">×</span>`;
+    div.querySelector('.nm').onclick = () => { MAP.activeLightId = entry.id; selectSceneObject(entry.id); refreshMapLightList(); refreshMapLightPropsUI(); rebuildMapLightPathVisuals(); };
+    div.querySelector('.eye').onclick = (e) => {
+      e.stopPropagation();
+      entry.visible = entry.visible === false;
+      if (entry.object3d) entry.object3d.visible = entry.visible !== false;
+      if (entry.helper) entry.helper.visible = entry.visible !== false && shouldShowEditorHelpers();
+      refreshMapLightList();
+    };
+    div.querySelector('.del').onclick = (e) => { e.stopPropagation(); if (MAP.activeLightId === entry.id) MAP.activeLightId = null; deleteSceneObject(entry.id); refreshMapLightList(); refreshMapLightPropsUI(); };
+    list.appendChild(div);
+  });
+}
+
+const MAP_LIGHT_SLIDER_MAX = 250;
+
+/** Slider 0–250 (recommended); number field accepts any value manually. */
+function bindLightParamSlider(rangeId, valId, onInput, fmt = v => String(v)) {
+  const r = document.getElementById(rangeId), v = document.getElementById(valId);
+  if (!r || !v) return;
+  const rMax = parseFloat(r.max);
+  const rMin = parseFloat(r.min);
+  const hasBoundedSlider = isFinite(rMax) && rMax <= MAP_LIGHT_SLIDER_MAX + 1;
+  const apply = (n) => {
+    if (!isFinite(n)) return;
+    onInput(n);
+    v.value = fmt(n);
+    if (hasBoundedSlider) r.value = Math.min(rMax, Math.max(rMin, n));
+    else if (n <= MAP_LIGHT_SLIDER_MAX) r.value = n;
+  };
+  r.oninput = () => apply(parseFloat(r.value));
+  v.onchange = () => apply(parseFloat(v.value));
+  v.addEventListener('keydown', e => { if (e.key === 'Enter') apply(parseFloat(v.value)); });
+}
+
+function sliderVal(v, max = MAP_LIGHT_SLIDER_MAX) {
+  return Math.min(max, Math.max(0, v));
+}
+
+function fmtLightNum(v) {
+  if (!isFinite(v)) return '0';
+  return Math.abs(v) >= 1000 ? v.toExponential(2) : (Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(2) : String(Number(v.toFixed(3))));
+}
+
+function bindBoundedSlider(rangeId, valId, onInput, fmt = v => String(v)) {
+  const r = document.getElementById(rangeId), v = document.getElementById(valId);
+  if (!r || !v) return;
+  const apply = () => {
+    let n = parseFloat(v.value);
+    if (!isFinite(n)) n = parseFloat(r.value);
+    n = Math.min(parseFloat(r.max), Math.max(parseFloat(r.min), n));
+    r.value = n;
+    v.value = fmt(n);
+    onInput(n);
+  };
+  r.oninput = () => { v.value = r.value; apply(); };
+  v.onchange = apply;
+}
+
+function bindMapLightPropSliders(entry) {
+  const sync = () => { if (entry.helper?.update) entry.helper.update(); configureMapLightShadows(entry.light); };
+  bindLightParamSlider('mbLpInt', 'mbLpIntV', v => { entry.light.intensity = v; sync(); }, fmtLightNum);
+  document.getElementById('mbLpCol')?.addEventListener('input', e => { entry.light.color.set(e.target.value); sync(); });
+  bindBoundedSlider('mbLpDist', 'mbLpDistV', v => { if ('distance' in entry.light) entry.light.distance = v; sync(); }, v => Number(v).toFixed(1));
+  bindBoundedSlider('mbLpAng', 'mbLpAngV', v => { if (entry.light.isSpotLight) entry.light.angle = v; sync(); }, v => Number(v).toFixed(2));
+  bindBoundedSlider('mbLpPen', 'mbLpPenV', v => { if (entry.light.isSpotLight) entry.light.penumbra = v; sync(); }, v => Number(v).toFixed(2));
+  bindBoundedSlider('mbLpDecay', 'mbLpDecayV', v => { if ('decay' in entry.light) entry.light.decay = v; sync(); }, v => Number(v).toFixed(2));
+  document.getElementById('mbLpSh')?.addEventListener('change', e => { entry.light.castShadow = e.target.checked; if (e.target.checked) configureMapLightShadows(entry.light); });
+  document.getElementById('mbLpShMap')?.addEventListener('input', e => { const s = parseInt(e.target.value, 10); entry.light.shadow.mapSize.set(s, s); });
+  bindBoundedSlider('mbLpShBias', 'mbLpShBiasV', v => { entry.light.shadow.bias = v; }, v => Number(v).toFixed(4));
+  bindBoundedSlider('mbLpShRad', 'mbLpShRadV', v => { entry.light.shadow.radius = v; }, v => Number(v).toFixed(1));
+  bindBoundedSlider('mbLpW', 'mbLpWV', v => { if (entry.light.isRectAreaLight) { entry.light.width = v; if (entry.helper?.update) entry.helper.update(); } }, v => Number(v).toFixed(1));
+  bindBoundedSlider('mbLpH', 'mbLpHV', v => { if (entry.light.isRectAreaLight) { entry.light.height = v; if (entry.helper?.update) entry.helper.update(); } }, v => Number(v).toFixed(1));
+}
+
+function bindSliderEl(rangeId, valId, onInput, fmt) {
+  bindLightParamSlider(rangeId, valId, onInput, fmt);
+}
+
+function refreshMapLightPropsUI() {
+  const box = document.getElementById('mbLightProps');
+  if (!box) return;
+  const entry = getActiveMapLightEntry();
+  if (!entry?.light) {
+    box.innerHTML = '<div class="note" style="text-align:center;padding:4px;">Select a light to edit parameters.</div>';
+    return;
+  }
+  const L = entry.light;
+  const S = MAP_LIGHT_SLIDER_MAX;
+  let html = `<div style="font-size:11px;color:#ffb347;margin-bottom:6px;">${escapeHtml(entry.name)}</div>`;
+  html += `<div class="note" style="margin-bottom:6px;">Intensity: slider 0–${S} · number field accepts any value</div>`;
+  html += `<div class="row"><label class="lbl">Intensity</label><input type="range" id="mbLpInt" min="0" max="${S}" step="0.5" value="${sliderVal(L.intensity)}"><input class="val" id="mbLpIntV" type="number" min="0" step="0.1" value="${L.intensity}"></div>`;
+  html += `<div class="row"><label class="lbl">Color</label><input type="color" id="mbLpCol" value="#${L.color.getHexString()}"></div>`;
+  if ('distance' in L && L.distance > 0) {
+    html += `<div class="row"><label class="lbl">Distance</label><input type="range" id="mbLpDist" min="1" max="120" step="0.5" value="${L.distance}"><input class="val" id="mbLpDistV" value="${L.distance.toFixed(1)}"></div>`;
+  }
+  if ('decay' in L) html += `<div class="row"><label class="lbl">Decay</label><input type="range" id="mbLpDecay" min="0" max="3" step="0.05" value="${L.decay}"><input class="val" id="mbLpDecayV" value="${L.decay.toFixed(2)}"></div>`;
+  if (L.isSpotLight) {
+    html += `<div class="row"><label class="lbl">Angle</label><input type="range" id="mbLpAng" min="0.05" max="1.4" step="0.01" value="${L.angle}"><input class="val" id="mbLpAngV" value="${L.angle.toFixed(2)}"></div>`;
+    html += `<div class="row"><label class="lbl">Penumbra</label><input type="range" id="mbLpPen" min="0" max="1" step="0.01" value="${L.penumbra}"><input class="val" id="mbLpPenV" value="${L.penumbra.toFixed(2)}"></div>`;
+  }
+  if (L.isRectAreaLight) {
+    html += `<div class="row"><label class="lbl">Width</label><input type="range" id="mbLpW" min="0.5" max="20" step="0.1" value="${L.width}"><input class="val" id="mbLpWV" value="${L.width.toFixed(1)}"></div>`;
+    html += `<div class="row"><label class="lbl">Height</label><input type="range" id="mbLpH" min="0.5" max="20" step="0.1" value="${L.height}"><input class="val" id="mbLpHV" value="${L.height.toFixed(1)}"></div>`;
+  }
+  const sh = L.castShadow ? 'checked' : '';
+  html += `<label class="check-row"><input type="checkbox" id="mbLpSh" ${sh}> Cast shadow on map</label>`;
+  html += `<div class="row"><label class="lbl">Shadow res</label><input type="range" id="mbLpShMap" min="512" max="4096" step="512" value="${L.shadow?.mapSize?.x || 2048}"></div>`;
+  html += `<div class="row"><label class="lbl">Sh. bias</label><input type="range" id="mbLpShBias" min="-0.01" max="0.01" step="0.0001" value="${L.shadow?.bias || 0}"><input class="val" id="mbLpShBiasV" value="${(L.shadow?.bias || 0).toFixed(4)}"></div>`;
+  html += `<div class="row"><label class="lbl">Sh. soft</label><input type="range" id="mbLpShRad" min="0" max="8" step="0.1" value="${L.shadow?.radius || 2}"><input class="val" id="mbLpShRadV" value="${(L.shadow?.radius || 2).toFixed(1)}"></div>`;
+  box.innerHTML = html;
+  bindMapLightPropSliders(entry);
+}
+
+function isFlyModeActive() {
+  return !!MAP.flyMode;
+}
+
+function toggleMapFlyMode() {
+  MAP.flyMode = !MAP.flyMode;
+  const cb = document.getElementById('mbFlyMode');
+  if (cb) cb.checked = MAP.flyMode;
+  syncMapFlyUI();
+}
+
+function syncFlyOrientationFromCamera() {
+  const e = new THREE.Euler(0, 0, 0, 'YXZ');
+  e.setFromQuaternion(camera.quaternion, 'YXZ');
+  MAP.flyYaw = e.y;
+  MAP.flyPitch = e.x;
+}
+
+function applyFlyCameraRotation() {
+  camera.rotation.order = 'YXZ';
+  camera.rotation.x = MAP.flyPitch;
+  camera.rotation.y = MAP.flyYaw;
+  camera.rotation.z = 0;
+  camera.updateMatrixWorld(true);
+}
+
+function syncMapFlyUI() {
+  const on = isFlyModeActive();
+  const joy = document.getElementById('mbFlyJoystick');
+  if (joy) joy.classList.toggle('show', on && window.matchMedia('(max-width:820px)').matches);
+  controls.enableRotate = !on;
+  controls.enablePan = !on;
+  controls.enableZoom = !on;
+  if (on) syncFlyOrientationFromCamera();
+  const hud = document.getElementById('help');
+  if (hud && on) hud.innerHTML = '<b>Flight</b> · W/S · A/D · Q/E · Shift boost · LMB look · <b>F</b> exit';
+  else if (hud && !on) hud.innerHTML = 'LMB: orbit · RMB: pan · scroll: zoom · <b>G/R/S</b> move/rotate/scale · <b>K</b> keyframe · <b>F</b> flight · drag-drop files';
+}
+
+const _flyFwd = new THREE.Vector3();
+const _flyRight = new THREE.Vector3();
+const _flyVel = new THREE.Vector3();
+const _flyUp = new THREE.Vector3(0, 1, 0);
+function updateMapFly(dt) {
+  if (!isFlyModeActive()) return;
+  applyFlyCameraRotation();
+
+  const speed = MAP.flySpeed * (MAP.keys.shift ? MAP.flyBoost : 1);
+  camera.getWorldDirection(_flyFwd);
+  _flyRight.crossVectors(_flyFwd, _flyUp).normalize();
+
+  let forward = (MAP.keys.w ? 1 : 0) - (MAP.keys.s ? 1 : 0);
+  let strafe = (MAP.keys.d ? 1 : 0) - (MAP.keys.a ? 1 : 0);
+  let lift = (MAP.keys.e ? 1 : 0) - (MAP.keys.q ? 1 : 0);
+  forward -= MAP.joyY;
+  strafe += MAP.joyX;
+
+  _flyVel.set(0, 0, 0);
+  if (Math.abs(forward) > 0.001) _flyVel.addScaledVector(_flyFwd, forward * speed * dt);
+  if (Math.abs(strafe) > 0.001) _flyVel.addScaledVector(_flyRight, strafe * speed * dt);
+  if (Math.abs(lift) > 0.001) _flyVel.y += lift * speed * dt;
+
+  camera.position.add(_flyVel);
+  camera.getWorldDirection(_flyFwd);
+  controls.target.copy(camera.position).addScaledVector(_flyFwd, 8);
+}
+
+function initMapFlyJoystick() {
+  const el = document.getElementById('mbFlyJoystick');
+  if (!el) return;
+  const knob = el.querySelector('.mb-joy-knob');
+  let pid = null;
+  const reset = () => { MAP.joyX = 0; MAP.joyY = 0; if (knob) { knob.style.transform = 'translate(0,0)'; } pid = null; };
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); pid = e.changedTouches[0].identifier; }, { passive: false });
+  el.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const t = [...e.changedTouches].find(x => x.identifier === pid);
+    if (!t) return;
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const dx = t.clientX - cx, dy = t.clientY - cy;
+    const max = r.width * 0.38;
+    const len = Math.hypot(dx, dy) || 1;
+    const cl = Math.min(len, max);
+    MAP.joyX = (dx / len) * (cl / max);
+    MAP.joyY = (dy / len) * (cl / max);
+    if (knob) knob.style.transform = `translate(${MAP.joyX * max}px, ${MAP.joyY * max}px)`;
+  }, { passive: false });
+  el.addEventListener('touchend', reset);
+  el.addEventListener('touchcancel', reset);
+}
+
+function initMapFlyLook() {
+  let lx = 0, ly = 0;
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+    if (!isFlyModeActive()) return;
+    if (window.matchMedia('(max-width:820px)').matches && e.clientX < window.innerWidth * 0.45) return;
+    if (e.button !== 0 && e.button !== 2) return;
+    MAP.flyLookDrag = true;
+    lx = e.clientX; ly = e.clientY;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!MAP.flyLookDrag) return;
+    const dx = e.clientX - lx, dy = e.clientY - ly;
+    lx = e.clientX; ly = e.clientY;
+    MAP.flyYaw += dx * 0.004 * MAP.flyLook;
+    MAP.flyPitch = THREE.MathUtils.clamp(MAP.flyPitch + dy * 0.004 * MAP.flyLook, -1.45, 1.45);
+  });
+  window.addEventListener('pointerup', () => { MAP.flyLookDrag = false; });
+}
+
+function switchMapTab(tab) {
+  document.querySelectorAll('#mapBuilder .mb-tab').forEach(b => b.classList.toggle('active', b.dataset.mbtab === tab));
+  document.querySelectorAll('#mapBuilder .mb-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.mbtab === tab));
+}
+
+
+function mapPropEntries() {
+  return [...SCENE_OBJECTS.values()].filter(e => e.type === 'mapprop');
+}
+
+function refreshMapAssetList() {
+  const list = document.getElementById('mbAssetList');
+  if (!list) return;
+  const props = mapPropEntries();
+  list.innerHTML = '';
+  if (props.length === 0) {
+    list.innerHTML = '<div class="note" style="text-align:center;padding:8px;">No location assets yet — import one above.</div>';
+    return;
+  }
+  props.forEach(entry => {
+    const div = document.createElement('div');
+    div.className = 'mb-asset' + (entry.id === sceneSelectedId ? ' sel' : '');
+    div.innerHTML = `<span class="eye${entry.visible === false ? ' off' : ''}">${entry.visible === false ? '○' : '●'}</span>`
+      + `<span class="nm" title="${escapeHtml(entry.name)}">${escapeHtml(entry.name)}</span>`
+      + `<span class="dup" title="Duplicate">⧉</span><span class="del" title="Delete">×</span>`;
+    div.querySelector('.nm').onclick = () => selectSceneObject(entry.id);
+    div.querySelector('.eye').onclick = (e) => {
+      e.stopPropagation();
+      entry.visible = entry.visible === false;
+      if (entry.object3d) entry.object3d.visible = entry.visible !== false;
+      refreshMapAssetList();
+    };
+    div.querySelector('.dup').onclick = (e) => { e.stopPropagation(); duplicateMapProp(entry.id); };
+    div.querySelector('.del').onclick = (e) => { e.stopPropagation(); deleteSceneObject(entry.id); };
+    list.appendChild(div);
+  });
+}
+
+function duplicateMapProp(id) {
+  const entry = SCENE_OBJECTS.get(id);
+  if (!entry?.object3d) return;
+  const clone = entry.object3d.clone(true);
+  const e2 = addMapProp(clone, entry.name + ' copy', entry.fileName);
+  if (e2) {
+    e2.object3d.position.copy(entry.object3d.position).add(new THREE.Vector3(1.5, 0, 0));
+    e2.object3d.quaternion.copy(entry.object3d.quaternion);
+    e2.object3d.scale.copy(entry.object3d.scale);
+    selectSceneObject(e2.id);
+  }
+}
+
+function serializeMap() {
+  return {
+    version: 2,
+    props: mapPropEntries().map(e => ({
+      fileName: e.fileName,
+      name: e.name,
+      position: e.object3d.position.toArray(),
+      quaternion: e.object3d.quaternion.toArray(),
+      scale: e.object3d.scale.toArray(),
+    })),
+    lights: mapLightEntries().map(e => ({
+      id: e.id,
+      name: e.name,
+      kind: e.mapLightKind || e.type.replace('light_', ''),
+      type: e.type,
+      position: e.object3d.position.toArray(),
+      quaternion: e.object3d.quaternion?.toArray?.() || [0, 0, 0, 1],
+      target: e.target ? e.target.position.toArray() : null,
+      intensity: e.light.intensity,
+      color: '#' + e.light.color.getHexString(),
+      distance: e.light.distance,
+      decay: e.light.decay,
+      angle: e.light.angle,
+      penumbra: e.light.penumbra,
+      width: e.light.width,
+      height: e.light.height,
+      castShadow: e.light.castShadow,
+      pathKeys: e.pathKeys || [],
+    })),
+    lightPathDuration: MAP.lightPathDuration,
+  };
+}
+
+function saveMapToFile() {
+  const data = serializeMap();
+  if (data.props.length === 0 && (!data.lights || data.lights.length === 0)) { showError('No map assets or lights to save.'); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `animastage-map-${Date.now()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+async function loadMapFromFile(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch (e) { showError('Invalid map file.'); return; }
+  if (!data || !Array.isArray(data.props)) { showError('Invalid map file.'); return; }
+  const missing = [];
+  for (const p of data.props) {
+    const af = findRegisteredFile(p.fileName);
+    if (!af) { missing.push(p.fileName); continue; }
+    try {
+      const obj = await loadLocationAssetFile(af);
+      addMapProp(obj, p.name, p.fileName, { position: p.position, quaternion: p.quaternion, scale: p.scale });
+    } catch (e) { missing.push(p.fileName); }
+  }
+  if (Array.isArray(data.lights)) {
+    if (data.lightPathDuration) MAP.lightPathDuration = data.lightPathDuration;
+    for (const spec of data.lights) restoreMapLightFromData(spec);
+  }
+  if (missing.length) {
+    showError('Some map assets are missing — drop their files/ZIP first, then load again. Missing: ' + [...new Set(missing)].join(', '));
+  }
+  refreshMapAssetList();
+  refreshMapLightList();
+  rebuildMapLightPathVisuals();
+  saveMapLightPaths();
+}
+
+function restoreMapLightFromData(spec) {
+  const kindMap = { point: 'point', spot: 'spot', directional: 'directional', hemi: 'hemisphere', hemisphere: 'hemisphere', area: 'area', projector: 'projector', neon: 'neon', tube: 'tube' };
+  const kind = kindMap[spec.kind] || kindMap[spec.type?.replace('light_', '')] || 'point';
+  const entry = createMapLight(kind);
+  if (!entry) return;
+  entry.name = spec.name || entry.name;
+  if (spec.position) entry.object3d.position.fromArray(spec.position);
+  if (spec.quaternion && entry.object3d.quaternion) entry.object3d.quaternion.fromArray(spec.quaternion);
+  if (spec.target && entry.target) entry.target.position.fromArray(spec.target);
+  if (spec.intensity != null) entry.light.intensity = spec.intensity;
+  if (spec.color) entry.light.color.set(spec.color);
+  if (spec.distance != null && 'distance' in entry.light) entry.light.distance = spec.distance;
+  if (spec.decay != null && 'decay' in entry.light) entry.light.decay = spec.decay;
+  if (spec.angle != null && entry.light.isSpotLight) entry.light.angle = spec.angle;
+  if (spec.penumbra != null && entry.light.isSpotLight) entry.light.penumbra = spec.penumbra;
+  if (spec.width != null && entry.light.isRectAreaLight) entry.light.width = spec.width;
+  if (spec.height != null && entry.light.isRectAreaLight) entry.light.height = spec.height;
+  if (spec.castShadow != null) entry.light.castShadow = spec.castShadow;
+  if (Array.isArray(spec.pathKeys)) entry.pathKeys = spec.pathKeys;
+  if (entry.light.castShadow) configureMapLightShadows(entry.light);
+  if (entry.helper?.update) entry.helper.update();
+}
+
+// ---- Location backdrop shader (swappable fullscreen-ish sky replacement) ----
+const LOCATION_PRESETS = {
+  gradient: `vec3 background(vec3 dir){
+  float h = clamp(dir.y*0.5+0.5, 0.0, 1.0);
+  return mix(uColorB, uColorA, pow(h, 0.6)) * uIntensity;
+}`,
+  sunset: `vec3 background(vec3 dir){
+  float h = clamp(dir.y*0.5+0.5, 0.0, 1.0);
+  vec3 sky = mix(uColorA, uColorB, pow(h, 0.8));
+  float sun = pow(clamp(dot(dir, normalize(vec3(0.0,0.05,-1.0))),0.0,1.0), 90.0);
+  vec3 glow = vec3(1.0,0.55,0.25) * pow(max(0.0,1.0-h),3.0)*0.6;
+  return (sky + glow + vec3(1.0,0.7,0.4)*sun) * uIntensity;
+}`,
+  starfield: `float h31(vec3 p){p=fract(p*0.1031);p+=dot(p,p.yzx+19.19);return fract((p.x+p.y)*p.z);}
+vec3 background(vec3 dir){
+  vec3 base = mix(uColorB, uColorA, clamp(dir.y*0.5+0.5,0.0,1.0));
+  vec3 cell = floor(dir*450.0);
+  float s = step(0.992, h31(cell)) * (0.6+0.4*sin(uTime*uSpeed*3.0+h31(cell)*40.0));
+  return (base + vec3(s)) * uIntensity;
+}`,
+  nebula: `float h31(vec3 p){p=fract(p*0.1031);p+=dot(p,p.yzx+19.19);return fract((p.x+p.y)*p.z);}
+float fbm(vec3 p){float v=0.0,a=0.5;for(int i=0;i<5;i++){v+=a*h31(floor(p));p*=2.0;a*=0.5;}return v;}
+vec3 background(vec3 dir){
+  float n = fbm(dir*4.0 + vec3(uTime*uSpeed*0.05));
+  vec3 col = mix(uColorB, uColorA, n);
+  col += vec3(0.4,0.2,0.6)*pow(n,3.0);
+  return col * uIntensity;
+}`,
+  grid: `vec3 background(vec3 dir){
+  vec3 base = mix(uColorB, uColorA, clamp(dir.y*0.5+0.5,0.0,1.0));
+  if (dir.y < -0.02) {
+    vec2 g = dir.xz / -dir.y;
+    g += uTime*uSpeed*0.2;
+    vec2 grid = abs(fract(g)-0.5);
+    float line = smoothstep(0.48,0.5,max(grid.x,grid.y));
+    base += vec3(0.0,0.9,1.0)*line*0.6;
+  }
+  return base * uIntensity;
+}`,
+};
+
+function locationFragShader(body) {
+  return `
+    varying vec3 vWorldDir;
+    uniform float uTime;
+    uniform vec2 uResolution;
+    uniform vec3 uCamDir;
+    uniform vec3 uColorA;
+    uniform vec3 uColorB;
+    uniform float uSpeed;
+    uniform float uIntensity;
+    ${body}
+    void main(){
+      vec3 dir = normalize(vWorldDir);
+      gl_FragColor = vec4(background(dir), 1.0);
+    }`;
+}
+
+const LOC = {
+  on: false,
+  preset: 'gradient',
+  speed: 1,
+  intensity: 1,
+  colA: '#1b2a4a',
+  colB: '#0a0a12',
+  envTint: true,
+  customSrc: LOCATION_PRESETS.gradient,
+};
+const LOC_STORAGE_KEY = 'mmd_rtx_location_v1';
+try {
+  const j = localStorage.getItem(LOC_STORAGE_KEY);
+  if (j) {
+    const saved = JSON.parse(j);
+    Object.assign(LOC, saved);
+    // Custom backdrop replaces procedural sky — keep it opt-in each session so
+    // day/night + stars are always the default on load.
+    LOC.on = false;
+  }
+} catch (_e) {}
+function saveLocation() { try { localStorage.setItem(LOC_STORAGE_KEY, JSON.stringify(LOC)); } catch (_e) {} }
+
+const locationBg = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.ShaderMaterial({
+    name: 'LocationBg',
+    uniforms: {
+      uTime: { value: 0 },
+      uResolution: { value: new THREE.Vector2(1, 1) },
+      uCamDir: { value: new THREE.Vector3(0, 0, -1) },
+      uColorA: { value: new THREE.Color(LOC.colA) },
+      uColorB: { value: new THREE.Color(LOC.colB) },
+      uSpeed: { value: LOC.speed },
+      uIntensity: { value: LOC.intensity },
+    },
+    vertexShader: NightSkyShader.vertexShader,
+    fragmentShader: locationFragShader(LOCATION_PRESETS.gradient),
+    side: THREE.BackSide,
+    depthWrite: false,
+  })
+);
+locationBg.scale.setScalar(448000);
+locationBg.frustumCulled = false;
+locationBg.renderOrder = -2;
+locationBg.visible = false;
+skyGroup.add(locationBg);
+
+function applyLocationEnvTint() {
+  if (!LOC.on || !LOC.envTint) return;
+  const a = new THREE.Color(LOC.colA);
+  const b = new THREE.Color(LOC.colB);
+  const mid = a.clone().lerp(b, 0.5);
+  if (scene.fog) scene.fog.color.copy(b);
+  scene.background = b.clone();
+  hemi.color.copy(a);
+  hemi.groundColor.copy(b);
+  ambient.color.copy(mid);
+}
+
+function setLocationShaderBody(body) {
+  const errEl = document.getElementById('mbShaderErr');
+  const prevFrag = locationBg.material.fragmentShader;
+  // Capture THREE's WebGLProgram error logs (printed via console.error) so we
+  // can surface GLSL compile failures inline instead of only in devtools.
+  let captured = '';
+  const origErr = console.error;
+  console.error = function (...args) {
+    captured += args.map(a => (typeof a === 'string' ? a : '')).join(' ') + '\n';
+    origErr.apply(console, args);
+  };
+  let ok = true;
+  try {
+    locationBg.material.fragmentShader = locationFragShader(body);
+    locationBg.material.needsUpdate = true;
+    renderer.compile(scene, camera);
+  } catch (e) {
+    captured += String(e.message || e);
+  } finally {
+    console.error = origErr;
+  }
+  if (/ERROR|error|compil|link/i.test(captured) && /FRAGMENT|shader|ERROR:/i.test(captured)) {
+    ok = false;
+    locationBg.material.fragmentShader = prevFrag;
+    locationBg.material.needsUpdate = true;
+    const m = captured.match(/ERROR:[^\n]*/);
+    if (errEl) { errEl.textContent = (m ? m[0] : 'GLSL compile error').slice(0, 140); errEl.classList.remove('ok'); }
+  } else if (errEl) {
+    errEl.textContent = 'Compiled OK';
+    errEl.classList.add('ok');
+  }
+  return ok;
+}
+
+function applyLocation() {
+  const u = locationBg.material.uniforms;
+  u.uColorA.value.set(LOC.colA);
+  u.uColorB.value.set(LOC.colB);
+  u.uSpeed.value = LOC.speed;
+  u.uIntensity.value = LOC.intensity;
+  const body = LOC.preset === 'custom' ? LOC.customSrc : (LOCATION_PRESETS[LOC.preset] || LOCATION_PRESETS.gradient);
+  setLocationShaderBody(body);
+  locationBg.visible = !!LOC.on;
+  // Procedural day/night sky + sun/moon are owned by updateSunSky().
+  if (typeof updateSunSky === 'function') updateSunSky();
+}
+
+// ---- Map Builder UI wiring ----
+function initMapBuilderUI() {
+  document.getElementById('btnOpenMapBuilder')?.addEventListener('click', openMapBuilder);
+  document.getElementById('mbClose')?.addEventListener('click', closeMapBuilder);
+  document.getElementById('mbImport')?.addEventListener('click', () => mapAssetInput.click());
+  document.getElementById('mbImportFolder')?.addEventListener('click', () => mapFolderInput.click());
+  document.getElementById('mbSaveMap')?.addEventListener('click', saveMapToFile);
+  document.getElementById('mbLoadMap')?.addEventListener('click', () => mapJsonInput.click());
+
+  const modeBtns = { mbMove: 'translate', mbRot: 'rotate', mbScale: 'scale' };
+  Object.entries(modeBtns).forEach(([id, mode]) => {
+    document.getElementById(id)?.addEventListener('click', () => {
+      setSceneTransformMode(mode);
+      Object.keys(modeBtns).forEach(b => document.getElementById(b)?.classList.toggle('active', b === id));
+    });
+  });
+
+  document.getElementById('mbGridSnap')?.addEventListener('change', (e) => {
+    transformControls.setTranslationSnap(e.target.checked ? 0.5 : null);
+    transformControls.setRotationSnap(e.target.checked ? THREE.MathUtils.degToRad(15) : null);
+  });
+
+  // Location backdrop controls
+  const presetSel = document.getElementById('mbLocPreset');
+  const onCb = document.getElementById('mbLocOn');
+  const colA = document.getElementById('mbLocColA');
+  const colB = document.getElementById('mbLocColB');
+  const tintCb = document.getElementById('mbLocEnvTint');
+  const srcEl = document.getElementById('mbShaderSrc');
+
+  if (onCb) onCb.checked = LOC.on;
+  if (presetSel) presetSel.value = LOC.preset;
+  if (colA) colA.value = LOC.colA;
+  if (colB) colB.value = LOC.colB;
+  if (tintCb) tintCb.checked = LOC.envTint;
+  if (srcEl) srcEl.value = LOC.preset === 'custom' ? LOC.customSrc : (LOCATION_PRESETS[LOC.preset] || LOCATION_PRESETS.gradient);
+
+  onCb?.addEventListener('change', e => { LOC.on = e.target.checked; applyLocation(); saveLocation(); });
+  presetSel?.addEventListener('change', e => {
+    LOC.preset = e.target.value;
+    if (LOC.preset !== 'custom' && srcEl) srcEl.value = LOCATION_PRESETS[LOC.preset] || '';
+    applyLocation(); saveLocation();
+  });
+  colA?.addEventListener('input', e => { LOC.colA = e.target.value; applyLocation(); saveLocation(); });
+  colB?.addEventListener('input', e => { LOC.colB = e.target.value; applyLocation(); saveLocation(); });
+  tintCb?.addEventListener('change', e => { LOC.envTint = e.target.checked; if (LOC.on) applyLocation(); saveLocation(); });
+  const spEl = document.getElementById('mbLocSpeed');
+  const inEl = document.getElementById('mbLocInt');
+  if (spEl) spEl.value = LOC.speed;
+  if (inEl) inEl.value = LOC.intensity;
+  bindSlider('mbLocSpeed', 'mbLocSpeedV', v => { LOC.speed = v; locationBg.material.uniforms.uSpeed.value = v; saveLocation(); }, v => v.toFixed(2));
+  bindSlider('mbLocInt', 'mbLocIntV', v => { LOC.intensity = v; locationBg.material.uniforms.uIntensity.value = v; saveLocation(); }, v => v.toFixed(2));
+
+  document.getElementById('mbCompile')?.addEventListener('click', () => {
+    if (!srcEl) return;
+    LOC.customSrc = srcEl.value;
+    LOC.preset = 'custom';
+    if (presetSel) presetSel.value = 'custom';
+    if (setLocationShaderBody(LOC.customSrc)) {
+      locationBg.visible = LOC.on;
+      saveLocation();
+    }
+  });
+
+  document.querySelectorAll('#mapBuilder .mb-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchMapTab(btn.dataset.mbtab));
+  });
+
+  const lightBtns = {
+    mbAddPoint: 'point', mbAddSpot: 'spot', mbAddProjector: 'projector', mbAddNeon: 'neon',
+    mbAddTube: 'tube', mbAddDir: 'directional', mbAddHemi: 'hemisphere', mbAddArea: 'area',
+  };
+  Object.entries(lightBtns).forEach(([id, kind]) => {
+    document.getElementById(id)?.addEventListener('click', () => createMapLight(kind));
+  });
+
+  document.getElementById('mbFlyMode')?.addEventListener('change', e => {
+    MAP.flyMode = e.target.checked;
+    syncMapFlyUI();
+  });
+  bindSlider('mbFlySpeed', 'mbFlySpeedV', v => { MAP.flySpeed = v; }, v => String(Math.round(v)));
+  bindSlider('mbFlyLook', 'mbFlyLookV', v => { MAP.flyLook = v; }, v => v.toFixed(2));
+
+  document.getElementById('mbLightPathEdit')?.addEventListener('change', e => {
+    MAP.editLightPath = e.target.checked;
+    rebuildMapLightPathVisuals();
+    refreshSceneTransformAttach();
+  });
+  document.getElementById('mbLightAddKey')?.addEventListener('click', () => addMapLightKeyframe(MAP.lightPathTime));
+  document.getElementById('mbLightPlay')?.addEventListener('click', () => {
+    MAP.lightPathPlaying = !MAP.lightPathPlaying;
+    updateMapLightPathUI();
+  });
+  document.getElementById('mbLightPathTrack')?.addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    MAP.lightPathTime = Math.max(0, Math.min(MAP.lightPathDuration, ((e.clientX - r.left) / r.width) * MAP.lightPathDuration));
+    updateMapLightPathUI();
+    const entry = getActiveMapLightEntry();
+    const s = entry?.pathKeys?.length ? sampleLightPath(entry.pathKeys, MAP.lightPathTime) : null;
+    if (s) applyLightKeyToEntry(entry, s);
+  });
+
+  initMapFlyJoystick();
+  initMapFlyLook();
+  loadMapLightPaths();
+}
+initMapBuilderUI();
 
 // =================================================================
 // WEATHER PARTICLES (rain / snow as instanced points)
@@ -2095,11 +3634,47 @@ scene.add(precipPoints);
 //
 // We also normalise path separators (MMD models often use \ from Windows)
 // and try a few fallbacks (basename only, then case-insensitive).
-const fileMap = new Map();   // 'face.png' (lowercase basename) → blobURL
+const fileMap = new Map();   // lowercase path key → blobURL
 const registeredFiles = new Map(); // lowercase basename → File (for session restore)
+const pathIndex = [];        // { rel, url, bn, stem } for fuzzy texture lookup
 const blobUrls = [];         // tracked so we can revoke on reset
+
+const ASSET_TEX_EXTS = new Set(['png', 'jpg', 'jpeg', 'bmp', 'tga', 'webp', 'gif', 'ktx', 'ktx2', 'dds', 'spa', 'sph']);
+const ASSET_MODEL_EXTS = new Set(['pmx', 'pmd', 'glb', 'gltf', 'obj']);
+const ASSET_MTL_EXT = 'mtl';
+
 function basename(p) {
-  return p.replace(/\\/g, '/').split('/').pop();
+  return String(p ?? '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || '';
+}
+function fileStem(name) {
+  return basename(name).replace(/\.[^.]+$/, '').toLowerCase();
+}
+function normAssetPath(p) {
+  const s = String(p ?? '').replace(/\\/g, '/');
+  try { return decodeURIComponent(s).toLowerCase().split('?')[0].split('#')[0]; }
+  catch (_e) { return s.toLowerCase().split('?')[0].split('#')[0]; }
+}
+function fileRelPath(file) {
+  if (!file) return '';
+  return normAssetPath(file._relPath || file.webkitRelativePath || file.name);
+}
+
+/** Pull a relative asset path out of MTLLoader's blob URL + filename glue. */
+function relativePathFromRequest(url) {
+  let raw = String(url ?? '');
+  if (!raw) return '';
+  if (/^blob:/i.test(raw)) {
+    // blob:http://host/uuid/textures/foo.png  OR  blob:http://host/filename.png
+    const tail = raw.match(/^blob:[^?#]+[/\\](.+)$/i);
+    if (tail && tail[1] && !/^[0-9a-f-]{36}$/i.test(tail[1])) raw = tail[1];
+  }
+  if (/^https?:\/\//i.test(raw) || /^data:/i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      raw = u.pathname.replace(/^\//, '');
+    } catch (_e) {}
+  }
+  return normAssetPath(raw);
 }
 
 function registerFile(file) {
@@ -2107,17 +3682,426 @@ function registerFile(file) {
   registeredFiles.set(bn, file);
   const url = URL.createObjectURL(file);
   fileMap.set(bn, url);
-  const relPath = file._relPath || file.webkitRelativePath;
-  if (relPath) {
-    const rel = relPath.replace(/\\/g, '/').toLowerCase();
+  blobUrls.push(url);
+
+  const rel = fileRelPath(file);
+  if (rel) {
     fileMap.set(rel, url);
     const parts = rel.split('/');
-    for (let i = 1; i < parts.length; i++) {
+    for (let i = 0; i < parts.length; i++) {
       const sub = parts.slice(i).join('/');
       if (!fileMap.has(sub)) fileMap.set(sub, url);
     }
   }
-  blobUrls.push(url);
+  pathIndex.push({ rel, url, bn, stem: fileStem(file.name) });
+}
+
+function resolveResourceUrl(url) {
+  const norm = relativePathFromRequest(url);
+  const resolved = findTextureUrl(norm || url);
+  if (resolved) return resolved;
+  return typeof url === 'string' ? url : String(url ?? '');
+}
+
+function findCompanionFile(modelFile, ext) {
+  const want = fileStem(modelFile) + '.' + String(ext).replace(/^\./, '');
+  const modelRel = fileRelPath(modelFile);
+  const modelDir = modelRel.includes('/') ? modelRel.slice(0, modelRel.lastIndexOf('/')) : '';
+  const hits = [];
+  for (const f of registeredFiles.values()) {
+    if (f.name.toLowerCase() === want) hits.push(f);
+  }
+  if (hits.length === 0) {
+    for (const entry of pathIndex) {
+      if (entry.bn === want) {
+        const f = registeredFiles.get(entry.bn);
+        if (f) hits.push(f);
+      }
+    }
+  }
+  if (hits.length === 0) return null;
+  for (const c of hits) {
+    const cRel = fileRelPath(c);
+    const cDir = cRel.includes('/') ? cRel.slice(0, cRel.lastIndexOf('/')) : '';
+    if (cDir === modelDir) return c;
+  }
+  return hits[0];
+}
+
+async function readRegisteredFileText(file) {
+  const url = fileMap.get(fileRelPath(file)) || fileMap.get(file.name.toLowerCase());
+  if (!url) return '';
+  return fetch(url).then(r => r.text());
+}
+
+async function findMtlForObj(objFile) {
+  try {
+    const text = await readRegisteredFileText(objFile);
+    const mtllibMatch = text.match(/^\s*mtllib\s+(.+)$/im);
+    if (mtllibMatch) {
+      for (const libName of mtllibMatch[1].trim().split(/\s+/)) {
+        const bn = basename(libName).toLowerCase();
+        for (const f of registeredFiles.values()) {
+          if (f.name.toLowerCase() === bn) return f;
+        }
+        for (const entry of pathIndex) {
+          if (entry.bn === bn) {
+            const f = registeredFiles.get(entry.bn);
+            if (f) return f;
+          }
+        }
+      }
+    }
+  } catch (_e) {}
+  return findCompanionFile(objFile, 'mtl');
+}
+
+function extractTexturePathFromMtlValue(value) {
+  const tokens = String(value ?? '').trim().split(/\s+/);
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const t = tokens[i].replace(/\\/g, '/');
+    if (/\.(png|jpe?g|bmp|tga|webp|dds|gif|tx|exr|hdr)$/i.test(t)) return t;
+  }
+  const last = tokens[tokens.length - 1]?.replace(/\\/g, '/');
+  return last || '';
+}
+
+function findTextureUrl(texPath) {
+  if (!texPath) return null;
+  let norm = normAssetPath(String(texPath).replace(/\\/g, '/'));
+  // Absolute Windows / Unix paths in MTL — match by filename only.
+  if (/^[a-z]:\//i.test(norm) || norm.includes(':/')) norm = basename(norm);
+  const bn = basename(norm);
+  if (fileMap.has(norm)) return fileMap.get(norm);
+  if (fileMap.has(bn)) return fileMap.get(bn);
+  for (const entry of pathIndex) {
+    if (!entry.rel) continue;
+    if (entry.rel === norm || entry.rel.endsWith('/' + norm) || norm.endsWith('/' + entry.rel)) return entry.url;
+    if (entry.bn === bn) return entry.url;
+  }
+  const stem = bn.replace(/\.(tga|bmp|jpg|jpeg|webp|png|dds)$/i, '');
+  for (const ext of ['.png', '.jpg', '.jpeg', '.bmp', '.tga', '.webp', '.dds']) {
+    if (fileMap.has(stem + ext)) return fileMap.get(stem + ext);
+  }
+  for (const entry of pathIndex) {
+    if (entry.stem === stem) return entry.url;
+  }
+  return null;
+}
+
+function linkMtlTexturePath(texPath, mtlDir) {
+  const url = findTextureUrl(texPath);
+  if (!url) return false;
+  let norm = normAssetPath(String(texPath).replace(/\\/g, '/'));
+  if (/^[a-z]:\//i.test(norm) || norm.includes(':/')) norm = basename(norm);
+  const bn = basename(norm);
+  fileMap.set(norm, url);
+  fileMap.set(bn, url);
+  if (mtlDir) {
+    fileMap.set(mtlDir + norm, url);
+    fileMap.set(mtlDir + bn, url);
+  }
+  return true;
+}
+
+function linkMtlTextures(mtlText, mtlFile) {
+  const mtlRel = fileRelPath(mtlFile);
+  const mtlDir = mtlRel.includes('/') ? mtlRel.slice(0, mtlRel.lastIndexOf('/') + 1) : '';
+  let linked = 0;
+  const missing = [];
+  for (const line of String(mtlText || '').split('\n')) {
+    const t = line.trim();
+    const m = t.match(/^(map_[a-z_]+|bump|norm|disp|decal)\s+(.+)$/i);
+    if (!m) continue;
+    const texPath = extractTexturePathFromMtlValue(m[2]);
+    if (!texPath) continue;
+    if (linkMtlTexturePath(texPath, mtlDir)) linked++;
+    else missing.push(texPath);
+  }
+  if (missing.length) {
+    console.warn('[MapBuilder] textures missing from bundle:', missing.slice(0, 10).join(', '), missing.length > 10 ? `(+${missing.length - 10} more)` : '');
+  }
+  return { linked, missing };
+}
+
+function getObjDir(objFile) {
+  const rel = fileRelPath(objFile);
+  return rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/') + 1) : '';
+}
+
+function collectTexturesNearObj(objFile) {
+  const objDir = getObjDir(objFile);
+  const texDir = objDir + 'textures/';
+  return pathIndex.filter(entry => {
+    if (!entry.rel || !/\.(png|jpe?g|bmp|tga|webp)$/i.test(entry.bn)) return false;
+    if (entry.rel.startsWith(texDir)) return true;
+    if (objDir && entry.rel.startsWith(objDir) && entry.rel.includes('/textures/')) return true;
+    if (!objDir && entry.rel.startsWith('textures/')) return true;
+    return false;
+  });
+}
+
+function texRelFromObj(entry, objDir) {
+  if (!entry?.rel) return '';
+  return entry.rel.startsWith(objDir) ? entry.rel.slice(objDir.length) : entry.rel;
+}
+
+/** City.obj + textures/City-RGB.png + City-RGBA.png style atlases. */
+function detectObjAtlasTextures(objFile, texEntries) {
+  const objStem = fileStem(objFile.name);
+  let diffuse = null, alpha = null;
+  for (const t of texEntries) {
+    const stem = t.stem.toLowerCase();
+    const matchesObj = stem.startsWith(objStem) || stem.startsWith(objStem + '-') || objStem.startsWith(stem.split('-')[0]);
+    if (!matchesObj && texEntries.length > 2) continue;
+    if (/rgba/i.test(t.bn)) alpha = alpha || t;
+    else if (/rgb/i.test(t.bn) || /\.(png|jpe?g)$/i.test(t.bn)) diffuse = diffuse || t;
+  }
+  if (!diffuse) diffuse = texEntries.find(t => !/rgba/i.test(t.bn));
+  if (!alpha) alpha = texEntries.find(t => /rgba/i.test(t.bn));
+  if (!diffuse && texEntries.length) diffuse = texEntries[0];
+  return { diffuse, alpha };
+}
+
+/** Merge C4D-style City-RGB + City-RGBA atlases (alpha channel often 0 on painted texels). */
+function loadImageElement(url) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error('image load failed: ' + url));
+    img.src = url;
+  });
+}
+
+async function buildC4DAtlasTexture(diffuseUrl, alphaUrl) {
+  const dImg = await loadImageElement(diffuseUrl);
+  const w = dImg.width, h = dImg.height;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(dImg, 0, 0);
+  const diff = ctx.getImageData(0, 0, w, h);
+  if (alphaUrl) {
+    const aImg = await loadImageElement(alphaUrl);
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(aImg, 0, 0, w, h);
+    const alpha = ctx.getImageData(0, 0, w, h);
+    for (let i = 0; i < diff.data.length; i += 4) {
+      const r = diff.data[i], g = diff.data[i + 1], b = diff.data[i + 2];
+      let a = alpha.data[i + 3];
+      // C4D export: RGBA alpha can be 0 even where RGB has paint — keep those opaque.
+      if (a < 16 && (r + g + b) > 30) a = 255;
+      diff.data[i + 3] = a;
+    }
+  } else {
+    for (let i = 0; i < diff.data.length; i += 4) diff.data[i + 3] = 255;
+  }
+  ctx.putImageData(diff, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+async function applyObjAtlasTextures(root, objFile) {
+  const texEntries = collectTexturesNearObj(objFile);
+  if (!texEntries.length) return false;
+  const atlas = detectObjAtlasTextures(objFile, texEntries);
+  if (!atlas.diffuse?.url) return false;
+  let mapTex;
+  try {
+    mapTex = await buildC4DAtlasTexture(atlas.diffuse.url, atlas.alpha?.url || null);
+  } catch (e) {
+    console.warn('[MapBuilder] atlas merge failed, using diffuse only:', e);
+    mapTex = await new Promise((res, rej) => {
+      new THREE.TextureLoader(loadingManager).load(atlas.diffuse.url, t => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.flipY = false;
+        res(t);
+      }, undefined, rej);
+    });
+  }
+  let hasCutout = false;
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const mat of mats) {
+      if (!mat) continue;
+      mat.map = mapTex;
+      mat.alphaMap = null;
+      mat.opacity = 1;
+      mat.transparent = !!atlas.alpha;
+      mat.alphaTest = atlas.alpha ? 0.35 : 0;
+      mat.depthWrite = !atlas.alpha;
+      mat.side = THREE.FrontSide;
+      mat.needsUpdate = true;
+      if (atlas.alpha) hasCutout = true;
+    }
+  });
+  if (hasCutout) mapTex.premultiplyAlpha = false;
+  console.info(`[MapBuilder] atlas textures applied: ${atlas.diffuse.bn}` + (atlas.alpha ? ` + ${atlas.alpha.bn} (merged alpha)` : ''));
+  return true;
+}
+
+function normToken(s) {
+  return String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function registerTextureFolderAliases(objFile) {
+  const objDir = getObjDir(objFile);
+  for (const t of collectTexturesNearObj(objFile)) {
+    const relFromObj = t.rel.startsWith(objDir) ? t.rel.slice(objDir.length) : t.rel;
+    linkMtlTexturePath(relFromObj, objDir);
+    if (relFromObj.includes('textures/')) linkMtlTexturePath(basename(t.rel), objDir);
+  }
+}
+
+function matchTextureForMaterial(matName, texEntries, objDir) {
+  const matTok = normToken(matName);
+  const tries = [
+    objDir + 'textures/' + matName,
+    objDir + matName,
+    'textures/' + matName,
+    matName,
+  ];
+  for (const base of tries) {
+    for (const ext of ['.png', '.jpg', '.jpeg', '.bmp', '.tga', '.webp']) {
+      if (findTextureUrl(base + ext)) {
+        const rel = (base + ext).replace(/\\/g, '/');
+        const relFromObj = rel.startsWith(objDir) ? rel.slice(objDir.length) : rel;
+        return { ref: relFromObj, abs: rel };
+      }
+    }
+  }
+  for (const t of texEntries) {
+    if (t.stem === matName.toLowerCase() || normToken(t.stem) === matTok) {
+      const relFromObj = t.rel.startsWith(objDir) ? t.rel.slice(objDir.length) : t.rel;
+      return { ref: relFromObj, abs: t.rel };
+    }
+  }
+  let best = null, bestScore = 0;
+  for (const t of texEntries) {
+    const stemTok = normToken(t.stem);
+    if (!stemTok || !matTok) continue;
+    let score = stemTok === matTok ? 100 : 0;
+    if (!score && (stemTok.includes(matTok) || matTok.includes(stemTok))) {
+      score = 40 + Math.min(stemTok.length, matTok.length);
+    }
+    if (score > bestScore) { best = t; bestScore = score; }
+  }
+  if (best) {
+    const relFromObj = best.rel.startsWith(objDir) ? best.rel.slice(objDir.length) : best.rel;
+    return { ref: relFromObj, abs: best.rel };
+  }
+  return null;
+}
+
+/** Build MTL text when only City.obj + textures/ exist (no .mtl file). */
+function buildSyntheticMtlFromObj(objText, objFile) {
+  const objDir = getObjDir(objFile);
+  const texEntries = collectTexturesNearObj(objFile);
+  const matNames = [];
+  for (const line of String(objText || '').split('\n')) {
+    const m = line.match(/^\s*usemtl\s+(.+)/i);
+    if (m) matNames.push(m[1].trim());
+  }
+  let unique = [...new Set(matNames)];
+  if (unique.length === 0) unique = ['default'];
+
+  // Atlas pack (City-RGB.png + City-RGBA.png) — one atlas for all materials.
+  const atlas = detectObjAtlasTextures(objFile, texEntries);
+  if (atlas.diffuse) {
+    const dRel = texRelFromObj(atlas.diffuse, objDir);
+    const aRel = atlas.alpha ? texRelFromObj(atlas.alpha, objDir) : null;
+    linkMtlTexturePath(dRel, objDir);
+    if (aRel) linkMtlTexturePath(aRel, objDir);
+    const lines = [];
+    for (const matName of unique) {
+      lines.push(`newmtl ${matName}`, 'Kd 1 1 1', `map_Kd ${dRel.replace(/\\/g, '/')}`);
+      // map_d omitted — C4D City-RGBA alpha channel misaligns with RGB; merged at runtime.
+    }
+    return { text: lines.join('\n') + '\n', mapped: unique.length, total: unique.length, objDir };
+  }
+
+  if (unique.length === 1 && texEntries.length === 1) {
+    const t = texEntries[0];
+    const relFromObj = texRelFromObj(t, objDir);
+    return {
+      text: `newmtl ${unique[0]}\nKd 1 1 1\nmap_Kd ${relFromObj}\n`,
+      mapped: 1,
+      total: 1,
+      objDir,
+    };
+  }
+  const lines = [];
+  let mapped = 0;
+  for (const matName of unique) {
+    lines.push(`newmtl ${matName}`, 'Kd 1 1 1');
+    const hit = matchTextureForMaterial(matName, texEntries, objDir);
+    if (hit) {
+      linkMtlTexturePath(hit.ref, objDir);
+      linkMtlTexturePath(hit.abs, objDir);
+      lines.push(`map_Kd ${hit.ref.replace(/\\/g, '/')}`);
+      mapped++;
+    }
+  }
+  return { text: lines.join('\n') + '\n', mapped, total: unique.length, objDir };
+}
+
+function parseObjMaterials(objText, objFile) {
+  registerTextureFolderAliases(objFile);
+  const synthetic = buildSyntheticMtlFromObj(objText, objFile);
+  if (!synthetic.text.trim()) return null;
+  linkMtlTextures(synthetic.text, objFile);
+  const materials = mtlLoader.parse(synthetic.text, synthetic.objDir || '');
+  if (synthetic.mapped > 0) {
+    console.info(`[MapBuilder] auto-MTL for ${objFile.name}: ${synthetic.mapped}/${synthetic.total} materials ← textures/ folder`);
+  } else {
+    console.warn(`[MapBuilder] no texture matches for ${objFile.name} — check textures/ names vs usemtl in .obj`);
+  }
+  return materials;
+}
+
+async function ingestAssetBundle(files, onProgress) {
+  let all = [...files];
+  const zips = all.filter(f => /\.zip$/i.test(f.name));
+  const nonZips = all.filter(f => !/\.zip$/i.test(f.name));
+  all = [...nonZips];
+  for (const z of zips) {
+    if (onProgress) onProgress('Extracting ' + z.name + '…');
+    all.push(...await extractZipToFiles(z));
+  }
+  for (const f of all) registerFile(f);
+
+  const models = [], textures = [], mtls = [], hdrs = [], vmds = [];
+  for (const f of all) {
+    const n = f.name.toLowerCase();
+    const ext = n.split('.').pop();
+    if (ASSET_MODEL_EXTS.has(ext)) models.push(f);
+    else if (ext === ASSET_MTL_EXT) mtls.push(f);
+    else if (ASSET_TEX_EXTS.has(ext)) textures.push(f);
+    else if (n.endsWith('.vmd')) vmds.push(f);
+    else if (n.endsWith('.hdr')) hdrs.push(f);
+  }
+  models.sort((a, b) => {
+    const da = fileRelPath(a).split('/').length;
+    const db = fileRelPath(b).split('/').length;
+    return da - db || a.name.localeCompare(b.name);
+  });
+  // Drop duplicate paths (same file registered twice from zip + loose pick).
+  const seenModel = new Set();
+  const uniqueModels = models.filter(f => {
+    const key = fileRelPath(f) || f.name.toLowerCase();
+    if (seenModel.has(key)) return false;
+    seenModel.add(key);
+    return true;
+  });
+  return {
+    all, models: uniqueModels, textures, mtls, hdrs, vmds,
+    stats: { total: all.length, models: uniqueModels.length, textures: textures.length, mtls: mtls.length },
+  };
 }
 
 async function extractZipToFiles(file) {
@@ -2128,9 +4112,10 @@ async function extractZipToFiles(file) {
   zip.forEach((relPath, entry) => {
     if (entry.dir) return;
     tasks.push(entry.async('blob').then((blob) => {
-      const name = basename(relPath);
+      const rel = String(relPath ?? '').replace(/\\/g, '/');
+      const name = basename(rel);
       const f = new File([blob], name, { type: blob.type || 'application/octet-stream' });
-      f._relPath = relPath.replace(/\\/g, '/');
+      f._relPath = rel;
       out.push(f);
     }));
   });
@@ -2140,34 +4125,15 @@ async function extractZipToFiles(file) {
 
 async function handleDroppedFiles(files) {
   clearError();
-  let allFiles = [...files];
-  const zips = allFiles.filter(f => f.name.toLowerCase().endsWith('.zip'));
-  const nonZips = allFiles.filter(f => !f.name.toLowerCase().endsWith('.zip'));
-  if (zips.length > 0) {
-    allFiles = [...nonZips];
-    for (const z of zips) {
-      try {
-        modelNameEl.textContent = z.name + ' (extracting…)';
-        const extracted = await extractZipToFiles(z);
-        allFiles.push(...extracted);
-      } catch (e) {
-        showError('ZIP failed: ' + (e.message || e));
-        modelNameEl.textContent = '— failed —';
-        return;
-      }
-    }
+  let bundle;
+  try {
+    bundle = await ingestAssetBundle(files, msg => { if (modelNameEl) modelNameEl.textContent = msg; });
+  } catch (e) {
+    showError('Import failed: ' + (e.message || e));
+    if (modelNameEl) modelNameEl.textContent = '— failed —';
+    return;
   }
-  for (const f of allFiles) registerFile(f);
-
-  const models = [];
-  const vmds = [];
-  const hdrs = [];
-  for (const f of allFiles) {
-    const n = f.name.toLowerCase();
-    if (n.endsWith('.pmx') || n.endsWith('.pmd')) models.push(f);
-    else if (n.endsWith('.vmd')) vmds.push(f);
-    else if (n.endsWith('.hdr')) hdrs.push(f);
-  }
+  const { models, vmds, hdrs } = bundle;
 
   if (hdrs.length > 0) loadHDR(hdrs[0]);
 
@@ -2178,37 +4144,264 @@ async function handleDroppedFiles(files) {
       characters.push(char);
       await loadCharacterModel(modelFile, { char, offsetIndex: i, useSavedTransform: false });
     }), Promise.resolve());
-    loadChain.then(() => {
-      for (const v of vmds) addVmdToLibrary(v, { assignToActive: false });
+    loadChain.then(async () => {
+      for (const v of vmds) await addVmdToLibrary(v, { assignToActive: false });
+      await tryAutoAssignCast();
     });
   } else if (vmds.length > 0) {
     if (!getActiveCharacter()?.mesh) {
       showError('Drop a .pmx/.pmd model first, then VMDs.');
       return;
     }
-    for (const v of vmds) addVmdAnimation(v);
+    (async () => {
+      // Register every dropped VMD into the library first (no eager assign — we
+      // don't want a multi-dancer pack to pile every part onto one model).
+      for (const v of vmds) await addVmdToLibrary(v, { assignToActive: false });
+      const assignedBefore = characters.filter(c => c.castSlotIndex != null).length;
+      // Re-run cast detection: assigns slot 1 to the active model and, if the
+      // pack needs more dancers than are loaded, raises the recommendation splash.
+      await tryAutoAssignCast();
+      const assignedAfter = characters.filter(c => c.castSlotIndex != null).length;
+      // Single-character case where nothing was newly assigned (the active model
+      // already had a dance): keep the old "drop a VMD → it plays" behaviour.
+      if (assignedAfter === assignedBefore && detectCastPlan().length <= 1) {
+        for (const v of vmds) await assignVmdToActiveCharacter(v);
+      }
+    })();
   }
 }
 
 const loadingManager = new THREE.LoadingManager();
-loadingManager.setURLModifier((url) => {
-  const norm = url.replace(/\\/g, '/').toLowerCase();
-  if (fileMap.has(norm)) return fileMap.get(norm);
-  const bn = basename(norm);
-  if (fileMap.has(bn)) return fileMap.get(bn);
-  // Some MMD models reference .tga textures; try the same basename with .png/.bmp
-  const stem = bn.replace(/\.(tga|bmp|spa|sph|jpg|jpeg)$/i, '');
-  for (const ext of ['.png', '.jpg', '.jpeg', '.bmp', '.tga']) {
-    if (fileMap.has(stem + ext)) return fileMap.get(stem + ext);
-  }
-  return url; // pass-through (will probably 404 unless absolute)
-});
+loadingManager.setURLModifier((url) => resolveResourceUrl(url));
 loadingManager.onError = (url) => {
-  // Silent — many MMDs reference missing textures and Three handles it.
-  console.warn('[MMD] missing resource:', url);
+  console.warn('[Asset] missing resource:', url);
 };
 
 const mmdLoader = new MMDLoader(loadingManager);
+const gltfLoader = new GLTFLoader(loadingManager);
+const objLoader = new OBJLoader(loadingManager);
+const mtlLoader = new MTLLoader(loadingManager);
+
+// ---------------------------------------------------------------------------
+// Build Map / location assets. Map props live in propsRoot (scene-editor
+// infrastructure) so selection/transform/delete are reused, but they are kept
+// out of the character/cast pipeline entirely.
+// ---------------------------------------------------------------------------
+async function loadLocationAssetFile(file) {
+  if (!fileMap.has(file.name.toLowerCase())) registerFile(file);
+  const url = fileMap.get(fileRelPath(file)) || fileMap.get(file.name.toLowerCase());
+  if (!url) throw new Error('not registered: ' + file.name);
+  const ext = file.name.toLowerCase().split('.').pop();
+  if (ext === 'pmx' || ext === 'pmd') {
+    return new Promise((res, rej) => mmdLoader.load(url, m => res(m), undefined, rej));
+  }
+  if (ext === 'glb' || ext === 'gltf') {
+    return new Promise((res, rej) => gltfLoader.load(url, g => res(g.scene || g.scenes?.[0]), undefined, rej));
+  }
+  if (ext === 'obj') {
+    const objText = await readRegisteredFileText(file);
+    mtlLoader.setPath('');
+    mtlLoader.setResourcePath('');
+    objLoader.setPath('');
+    registerTextureFolderAliases(file);
+
+    let materials = null;
+    const mtlFile = await findMtlForObj(file);
+    if (mtlFile) {
+      try {
+        const mtlText = await readRegisteredFileText(mtlFile);
+        linkMtlTextures(mtlText, mtlFile);
+        const mtlUrl = fileMap.get(fileRelPath(mtlFile)) || fileMap.get(mtlFile.name.toLowerCase());
+        if (mtlUrl) {
+          materials = await new Promise((res, rej) => mtlLoader.load(mtlUrl, res, undefined, rej));
+        }
+      } catch (e) {
+        console.warn('[MapBuilder] MTL load failed:', e);
+      }
+    }
+    // No .mtl on disk (City.obj + textures/ only) — auto-build materials from usemtl + textures/.
+    if (!materials) {
+      try { materials = parseObjMaterials(objText, file); }
+      catch (e) { console.warn('[MapBuilder] auto-MTL failed:', e); }
+    }
+
+    return new Promise((res, rej) => {
+      try {
+        if (materials) {
+          materials.preload();
+          objLoader.setMaterials(materials);
+        } else {
+          objLoader.setMaterials(null);
+        }
+      } catch (e) {
+        console.warn('[MapBuilder] material preload failed, loading untextured:', e);
+        objLoader.setMaterials(null);
+      }
+      objLoader.load(url, o => {
+        applyObjAtlasTextures(o, file)
+          .catch(e => console.warn('[MapBuilder] atlas apply failed:', e))
+          .finally(() => res(o));
+      }, undefined, rej);
+    });
+  }
+  throw new Error('unsupported asset: ' + file.name);
+}
+
+async function reloadMapPropEntry(entry) {
+  if (!entry?.fileName || !entry.object3d) return false;
+  const af = findRegisteredFile(entry.fileName);
+  if (!af) return false;
+  const t = {
+    position: entry.object3d.position.toArray(),
+    quaternion: entry.object3d.quaternion.toArray(),
+    scale: entry.object3d.scale.toArray(),
+  };
+  const name = entry.name;
+  const fileName = entry.fileName;
+  deleteSceneObject(entry.id);
+  const obj = await loadLocationAssetFile(af);
+  addMapProp(obj, name, fileName, t, { autoFit: false });
+  return true;
+}
+
+// Unlike PMX (authored to MMD scale + Y-up), glTF/OBJ assets come from many
+// editors at arbitrary scales (tiny ↔ galaxy-sized) and sometimes Z-up. On a
+// fresh import we measure the bounding box and: (1) optionally stand up a
+// likely Z-up model, (2) auto-scale wildly-off models toward stage scale, and
+// (3) center horizontally + rest the base on the floor so it lands usefully.
+const MAP_TARGET_SIZE = 30; // scene units (a character here is ~20 units tall)
+function autoFitMapProp(object3d, opts = {}) {
+  object3d.updateMatrixWorld(true);
+  let box = new THREE.Box3().setFromObject(object3d);
+  if (box.isEmpty()) return null;
+  let size = box.getSize(new THREE.Vector3());
+  let rotated = false;
+  // OBJ has no up-axis convention; if the model is far deeper (z) than tall (y)
+  // it was probably authored Z-up — rotate it upright.
+  if (opts.autoUpAxis && size.z > size.y * 2.2 && size.z >= size.x * 0.8) {
+    object3d.rotateX(-Math.PI / 2);
+    object3d.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(object3d);
+    size = box.getSize(new THREE.Vector3());
+    rotated = true;
+  }
+  const maxDim = Math.max(size.x, size.y, size.z);
+  let scaled = 1;
+  if (maxDim > 0 && isFinite(maxDim) && (maxDim < MAP_TARGET_SIZE / 25 || maxDim > MAP_TARGET_SIZE * 25)) {
+    scaled = MAP_TARGET_SIZE / maxDim;
+    object3d.scale.multiplyScalar(scaled);
+    object3d.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(object3d);
+  }
+  const c = box.getCenter(new THREE.Vector3());
+  object3d.position.x -= c.x;
+  object3d.position.z -= c.z;
+  object3d.position.y -= box.min.y;
+  if (scaled !== 1 || rotated) {
+    console.info(`[MapBuilder] auto-fit: ${rotated ? 'stood up (Z-up→Y-up), ' : ''}scale ×${scaled.toFixed(4)} (raw max ${maxDim.toFixed(2)}u)`);
+  }
+  return { scaled, rotated, maxDim };
+}
+
+function addMapProp(object3d, name, fileName, transform, opts = {}) {
+  if (!object3d) return null;
+  const id = genSceneId();
+  object3d.userData.sceneObjId = id;
+  object3d.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  if (transform) {
+    // Restoring a saved map — keep the exact authored transform.
+    if (transform.position) object3d.position.fromArray(transform.position);
+    if (transform.quaternion) object3d.quaternion.fromArray(transform.quaternion);
+    if (transform.scale) object3d.scale.fromArray(transform.scale);
+  } else if (opts.autoFit) {
+    autoFitMapProp(object3d, { autoUpAxis: !!opts.autoUpAxis });
+  }
+  propsRoot.add(object3d);
+  const entry = { id, name: name || 'Location', type: 'mapprop', object3d, visible: true, fileName: fileName || name };
+  SCENE_OBJECTS.set(id, entry);
+  if (!sceneEditorEnabled) {
+    sceneEditorEnabled = true;
+    const cb = document.getElementById('cSceneEditor');
+    if (cb) cb.checked = true;
+    stageEl.classList.add('scene-editor');
+  }
+  refreshSceneOutliner();
+  refreshMapAssetList();
+  countTris();
+  mapLightEntries().forEach(e => { if (e.light?.castShadow) configureMapLightShadows(e.light); });
+  return entry;
+}
+
+async function handleMapAssetImport(files) {
+  clearError();
+  const statusEl = document.getElementById('mbImportStatus');
+  const setStatus = (msg, ok) => {
+    if (statusEl) { statusEl.textContent = msg; statusEl.style.color = ok === false ? '#ff7066' : '#888'; }
+  };
+  let bundle;
+  try {
+    bundle = await ingestAssetBundle(files, msg => setStatus(msg));
+  } catch (e) {
+    showError('Import failed: ' + (e.message || e));
+    setStatus('Import failed.', false);
+    return;
+  }
+  const { models, textures, mtls, stats } = bundle;
+  if (models.length === 0) {
+    // Textures dropped after the mesh — re-link materials on existing map props.
+    if (textures.length > 0 || mtls.length > 0) {
+      const props = mapPropEntries();
+      let refreshed = 0;
+      for (const entry of props) {
+        if (!/\.obj$/i.test(entry.fileName || '')) continue;
+        try {
+          if (await reloadMapPropEntry(entry)) refreshed++;
+        } catch (e) {
+          console.warn('[MapBuilder] reload failed:', entry.name, e);
+        }
+      }
+      if (refreshed > 0) {
+        setStatus(`Linked ${stats.textures} textures · reloaded ${refreshed} model(s) with materials`, true);
+        return;
+      }
+    }
+    showError('No .pmx/.pmd/.glb/.gltf/.obj model found in selection.');
+    setStatus('No model in selection — use Import folder with .obj + .mtl + textures together.', false);
+    return;
+  }
+  let loaded = 0, failed = 0, skipped = 0;
+  for (const mf of models) {
+    const existing = mapPropEntries().find(e => e.fileName?.toLowerCase() === mf.name.toLowerCase());
+    if (existing) {
+      try {
+        setStatus(`Reloading ${mf.name} with ${stats.textures} textures…`);
+        await reloadMapPropEntry(existing);
+        loaded++;
+        skipped++;
+      } catch (e) {
+        failed++;
+        showError('Reload failed: ' + mf.name + ' — ' + (e.message || e));
+      }
+      continue;
+    }
+    try {
+      setStatus(`Loading ${mf.name}… (${stats.textures} textures, ${stats.mtls} mtl)`);
+      const obj = await loadLocationAssetFile(mf);
+      const ext = mf.name.toLowerCase().split('.').pop();
+      const isMMD = ext === 'pmx' || ext === 'pmd';
+      addMapProp(obj, mf.name.replace(/\.[^.]+$/, ''), mf.name, null, {
+        autoFit: !isMMD,
+        autoUpAxis: ext === 'obj',
+      });
+      loaded++;
+    } catch (e) {
+      failed++;
+      showError('Asset failed: ' + mf.name + ' — ' + (e.message || e));
+    }
+  }
+  const ddsNote = bundle.all.some(f => /\.dds$/i.test(f.name)) ? ' · note: .dds may not render in browser' : '';
+  setStatus(`Scanned ${stats.total} files · ${stats.textures} textures · ${stats.mtls} mtl · loaded ${loaded} model(s)` + (failed ? ` · ${failed} failed` : '') + ddsNote, failed === 0);
+}
 
 function loadHDR(file) {
   const url = fileMap.get(file.name.toLowerCase());
@@ -2276,9 +4469,23 @@ const vmdInput    = makeFileInput('.vmd', true);
 const folderInput = makeFileInput('', true);
 folderInput.webkitdirectory = true;
 const zipInput    = makeFileInput('.zip', true);
+const camVmdInput = makeFileInput('.vmd', false);
+// Splash "Add a model" accepts a raw model OR a zip pack (model + textures).
+const castModelInput = makeFileInput('.pmx,.pmd,.zip', true);
+castModelInput.onchange = (e) => { if (e.target.files.length) handleDroppedFiles(e.target.files); e.target.value = ''; };
+// Build Map: import location assets (any supported mesh format) and load a saved map.
+const mapAssetInput = makeFileInput('.pmx,.pmd,.glb,.gltf,.obj,.zip,.mtl,.png,.jpg,.jpeg,.bmp,.tga,.webp', true);
+mapAssetInput.onchange = (e) => { if (e.target.files.length) handleMapAssetImport(e.target.files); e.target.value = ''; };
+const mapFolderInput = makeFileInput('', true);
+mapFolderInput.webkitdirectory = true;
+mapFolderInput.onchange = (e) => { if (e.target.files.length) handleMapAssetImport(e.target.files); e.target.value = ''; };
+const mapJsonInput = makeFileInput('.json', false);
+mapJsonInput.onchange = (e) => { if (e.target.files[0]) loadMapFromFile(e.target.files[0]); e.target.value = ''; };
 
 document.getElementById('btnPickModel').onclick = () => modelInput.click();
 document.getElementById('btnPickVmd').onclick   = () => vmdInput.click();
+document.getElementById('btnPickCamVmd').onclick = () => camVmdInput.click();
+camVmdInput.onchange = (e) => { if (e.target.files[0]) loadCameraVmd(e.target.files[0]); e.target.value = ''; };
 document.getElementById('btnPickFolder').onclick= () => folderInput.click();
 document.getElementById('btnPickZip').onclick   = () => zipInput.click();
 
@@ -2981,7 +5188,7 @@ const {
   initAmmoPhysics, selectBone, setBoneTransformMode, setBoneSpace,
   refreshBoneExplorerUI, setBoneExplorerOpen, refreshBoneListUI, refreshBoneTimelineUI,
   refreshBonePropsUI, applyModelOpacity, captureModelMaterials, updateSkeletonHelper,
-  updatePremiumBoneVisuals, scheduleBoneTransformUpdate, pickBoneFromEvent,
+  updatePremiumBoneVisuals, updateRigHover, scheduleBoneTransformUpdate, pickBoneFromEvent,
   canPickBoneNow, suppressBonePick, isBoneTransformTarget, syncBoneGizmoProxyFromBone,
   applyBoneGizmoProxyToBone, seekBoneTime, addBoneKeyframe, applyRestPose,
   bakeBoneAnim, saveBoneAnim, loadBoneAnimSaved, buildBonePresetButtons,
@@ -3023,6 +5230,7 @@ function createCharacterSlot(id = genCharId()) {
     animTime: 0,
     loopIn: 0,
     loopOut: 0,
+    castSlotIndex: null,   // which auto-detected character slot this model fills
     transform: { position: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] },
   };
 }
@@ -3142,13 +5350,39 @@ function refreshVmdLibraryUI() {
   for (const file of globalVmdFiles.values()) {
     const div = document.createElement('div');
     div.className = 'vmd-lib-item';
-    div.innerHTML = `<span>${escapeHtml(file.name)}</span><span class="vmd-actions"><span class="mini assign-vmd">+ assign</span></span>`;
+    const isCam = looksLikeCameraVmd(file.name);
+    const active = isCam && CIN.vmdCam.name === file.name && CIN.vmdCamOn;
+    const label = isCam ? (active ? '🎥 active' : '🎥 camera') : '+ assign';
+    const icon = isCam ? '🎥 ' : '';
+    div.innerHTML = `<span>${icon}${escapeHtml(file.name)}</span><span class="vmd-actions"><span class="mini assign-vmd">${label}</span></span>`;
     div.querySelector('.assign-vmd').onclick = (e) => {
       e.stopPropagation();
-      assignVmdToActiveCharacter(file);
+      if (isCam) loadCameraVmd(file);
+      else assignVmdToActiveCharacter(file);
     };
     el.appendChild(div);
   }
+  refreshCamVmdLibSelect();
+}
+
+// Populate the "use a camera motion that's already loaded" dropdown from any
+// camera-looking VMDs in the library (incl. those that arrived inside a .zip).
+function refreshCamVmdLibSelect() {
+  const row = document.getElementById('camVmdLibRow');
+  const sel = document.getElementById('camVmdLibSel');
+  if (!row || !sel) return;
+  const cams = [...globalVmdFiles.values()].filter(f => looksLikeCameraVmd(f.name));
+  if (cams.length === 0) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  const prev = sel.value;
+  sel.innerHTML = '';
+  cams.forEach(f => {
+    const o = document.createElement('option');
+    o.value = f.name; o.textContent = f.name;
+    sel.appendChild(o);
+  });
+  sel.value = (CIN.vmdCam.name && cams.some(f => f.name === CIN.vmdCam.name))
+    ? CIN.vmdCam.name : (prev || cams[0].name);
 }
 
 function getCharacterMotionStates() {
@@ -3190,6 +5424,14 @@ function playAnim(idx, opts = {}) {
 }
 
 async function assignVmdToActiveCharacter(file, opts = {}) {
+  // Camera-motion VMDs drive the camera, not the skeleton.
+  if (looksLikeCameraVmd(file.name) && opts.asCamera !== false) {
+    globalVmdFiles.set(file.name.toLowerCase(), file);
+    refreshVmdLibraryUI();
+    loadCameraVmd(file);
+    vmdNameEl.textContent = file.name + ' (camera)';
+    return;
+  }
   const char = getActiveCharacter();
   if (!char?.mesh) {
     showError('Select a character before assigning a VMD.');
@@ -3248,13 +5490,203 @@ async function addVmdToCharacter(char, file, opts = {}) {
   });
 }
 
+// ===========================================================================
+// AUTO CAST DETECTION  (how many characters does this motion set need?)
+//
+// MMD multi-character dance packs ship one motion VMD per dancer, named with a
+// "CharacterN" token (+ an optional "Morph_CharacterN" facial file). We parse
+// those names to learn how many models the choreography expects, auto-assign
+// each model to the next free slot (merging its motion + morph into one clip),
+// and pop a splash recommending the user add the missing models.
+// ===========================================================================
+const castAssignedSlots = new Set();   // slot indices already given to a model
+let castDismissedSig = '';             // plan signature the user dismissed
+
+function looksLikeMorphVmd(name) {
+  return /morph|表情|skin|lip|リップ/i.test(name || '');
+}
+
+// Extract a 1-based character slot index from a VMD filename, or null.
+// Covers the common MMD conventions: "character1", "モデル2", "_c1_", "_p1_",
+// the player notation "1P"/"2P"/"P1", and the Japanese "2人目" / "2人".
+function castSlotIndexFromName(name) {
+  const n = name || '';
+  const m = n.match(/character[\s_]*0*(\d+)/i)
+        || n.match(/(?:モデル|キャラ(?:クター)?)[\s_]*0*(\d+)/i)
+        || n.match(/(\d+)\s*人(?:目)?/)
+        || n.match(/[_\-\s]c0*(\d+)(?=[_\-.\s]|$)/i)
+        || n.match(/(?:^|[_\-\s])0*(\d+)\s*p(?=[_\-.\s]|$)/i)   // 1P, 2 P
+        || n.match(/(?:^|[_\-\s])p0*(\d+)(?=[_\-.\s]|$)/i)      // P1, p2
+        || n.match(/[_\-\s]p0*(\d+)(?=[_\-.])/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Tokens used for fuzzy matching morph files to their motion counterpart.
+function castNameTokens(name) {
+  return (name || '')
+    .replace(/\.vmd$/i, '')
+    .toLowerCase()
+    .split(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]+/)
+    .filter(t => t.length > 1 && !/^(vmd|motion|dance|face|morph|表情|lip|リップ|skin)$/.test(t));
+}
+
+function castNameOverlap(a, b) {
+  const ta = castNameTokens(a), tb = new Set(castNameTokens(b));
+  let n = 0;
+  for (const t of ta) if (tb.has(t)) n++;
+  return n;
+}
+
+// Group library VMDs into per-character slots (skipping camera files).
+//
+// Detection order:
+//   1) If filenames carry explicit indices (1P, character2, モデル3…), trust them.
+//   2) Otherwise, if there are several distinct *motion* VMDs, assume each one
+//      is a separate dancer and pair morph files by filename similarity. This is
+//      what most real dance packs look like (e.g. "Miku.vmd" + "Rin.vmd").
+//   3) A single motion (with optional morph) collapses to one character.
+function detectCastPlan() {
+  const slots = new Map();
+  const orphanMotion = [], orphanMorph = [];
+  let anyIndexed = false;
+  for (const f of globalVmdFiles.values()) {
+    if (looksLikeCameraVmd(f.name)) continue;
+    const idx = castSlotIndexFromName(f.name);
+    const morph = looksLikeMorphVmd(f.name);
+    if (idx != null) {
+      anyIndexed = true;
+      if (!slots.has(idx)) slots.set(idx, { index: idx, motion: [], morph: [] });
+      (morph ? slots.get(idx).morph : slots.get(idx).motion).push(f);
+    } else {
+      (morph ? orphanMorph : orphanMotion).push(f);
+    }
+  }
+  let arr = [...slots.values()].sort((a, b) => a.index - b.index);
+
+  if (!anyIndexed) {
+    if (orphanMotion.length >= 2) {
+      // Multiple distinct dances → multiple dancers.
+      arr = orphanMotion.map((f, i) => ({ index: i + 1, motion: [f], morph: [] }));
+      for (const mf of orphanMorph) {
+        let best = arr[0], bestScore = -1;
+        for (const slot of arr) {
+          const score = castNameOverlap(mf.name, slot.motion[0]?.name || '');
+          if (score > bestScore) { bestScore = score; best = slot; }
+        }
+        best.morph.push(mf);
+      }
+    } else if (orphanMotion.length || orphanMorph.length) {
+      arr = [{ index: 1, motion: orphanMotion, morph: orphanMorph }];
+    }
+  }
+  return arr;
+}
+
+function castPlanSignature(plan) {
+  return plan.map(s => s.index + ':' + (s.motion[0]?.name || s.morph[0]?.name || '')).join('|');
+}
+
+// Friendly label for a slot (its motion file name, trimmed).
+function castSlotLabel(slot) {
+  const f = slot.motion[0] || slot.morph[0];
+  return f ? f.name.replace(/\.vmd$/i, '') : `Character ${slot.index}`;
+}
+
+// Merge a slot's motion + morph VMD into a single clip and attach to the model.
+async function assignCastSlotToChar(char, slot, opts = {}) {
+  const files = [];
+  if (slot.motion[0]) files.push(slot.motion[0]);
+  if (slot.morph[0]) files.push(slot.morph[0]);
+  if (files.length === 0) return;
+  const urls = files.map(f => fileMap.get(f.name.toLowerCase())).filter(Boolean);
+  if (urls.length === 0) return;
+  return new Promise((resolve) => {
+    mmdLoader.loadAnimation(urls.length === 1 ? urls[0] : urls, char.mesh, (clip) => {
+      char.loadedAnims.push({ name: castSlotLabel(slot), clip });
+      files.forEach(f => { if (!char.loadedVmdNames.includes(f.name)) char.loadedVmdNames.push(f.name); });
+      if (activeCharacterId === char.id) syncMotionFromCharacter(char);
+      refreshAnimListUI();
+      refreshVmdLibraryUI();
+      refreshCharacterListUI();
+      if (opts.autoPlay !== false) playAnimOnCharacter(char, char.loadedAnims.length - 1);
+      resolve(clip);
+    }, undefined, () => resolve(null));
+  });
+}
+
+// Give every loaded-but-idle model the next unfilled character slot.
+async function tryAutoAssignCast() {
+  const plan = detectCastPlan();
+  if (plan.length === 0) return;
+  for (const slot of plan) {
+    if (castAssignedSlots.has(slot.index)) continue;
+    const char = characters.find(c => c.mesh && c.castSlotIndex == null && c.loadedAnims.length === 0);
+    if (!char) break;
+    char.castSlotIndex = slot.index;
+    castAssignedSlots.add(slot.index);
+    await assignCastSlotToChar(char, slot);
+  }
+  maybeRecommendCast();
+}
+
+// Show the splash if the motion needs more models than are currently loaded.
+function maybeRecommendCast(force = false) {
+  const plan = detectCastPlan();
+  const required = plan.length;
+  const loaded = characters.filter(c => c.mesh).length;
+  const splash = document.getElementById('castSplash');
+  if (!splash) return;
+  if (required <= 1 || required <= loaded) { hideCastSplash(); return; }
+  const sig = castPlanSignature(plan);
+  if (!force && sig === castDismissedSig) return;   // user said "not now" for this set
+  renderCastSplash(plan, required, loaded);
+  splash.classList.add('show');
+}
+
+function renderCastSplash(plan, required, loaded) {
+  const missing = Math.max(0, required - loaded);
+  const titleEl = document.getElementById('castTitle');
+  const subEl = document.getElementById('castSub');
+  const slotsEl = document.getElementById('castSlots');
+  if (titleEl) titleEl.textContent = `This animation is made for ${required} characters`;
+  if (subEl) subEl.textContent = loaded >= 1
+    ? `You have ${loaded} model${loaded > 1 ? 's' : ''} loaded. Add ${missing} more so every dancer appears — each new model is auto-assigned its part.`
+    : `Add ${required} models — each one is auto-assigned its dance part as you load it.`;
+  if (!slotsEl) return;
+  slotsEl.innerHTML = '';
+  plan.forEach((slot, i) => {
+    const assignedChar = characters.find(c => c.castSlotIndex === slot.index && c.mesh);
+    const done = !!assignedChar;
+    const row = document.createElement('div');
+    row.className = 'cast-slot ' + (done ? 'done' : 'need');
+    row.innerHTML =
+      `<span class="badge">${done ? '✓' : (i + 1)}</span>` +
+      `<span class="meta"><div class="nm">${escapeHtml(castSlotLabel(slot))}</div>` +
+      `<div class="st">${done ? ('model: ' + escapeHtml(assignedChar.modelFileName || 'loaded')) : 'needs a model'}</div></span>`;
+    slotsEl.appendChild(row);
+  });
+}
+
+function hideCastSplash() {
+  const splash = document.getElementById('castSplash');
+  if (splash) splash.classList.remove('show');
+}
+
 function removeCharacter(charId) {
   const idx = characters.findIndex(c => c.id === charId);
   if (idx < 0) return;
   const char = characters[idx];
+  if (char.castSlotIndex != null) castAssignedSlots.delete(char.castSlotIndex);
   if (char.mesh) {
-    if (BONE.enabled && motion.currentMesh === char.mesh) clearBoneSystem();
-    disposeLoadedMesh(char.mesh);
+    const mesh = char.mesh;
+    // Detach the gizmo if it points at this model, or TransformControls keeps a
+    // live reference to a mesh we're about to dispose.
+    try { if (transformControls.object === mesh) transformControls.detach(); } catch (_) {}
+    try { if (motion.currentMesh === mesh) clearBoneSystem(); } catch (_) {}
+    // Disposal must never abort the rest of the cleanup (see disposeLoadedMesh).
+    try { disposeLoadedMesh(mesh); } catch (e) { console.warn('disposeLoadedMesh failed', e); }
+    try { if (mesh.parent) mesh.parent.remove(mesh); } catch (_) {}
+    char.mesh = null;
     unregisterModelObject(char.sceneId);
   }
   characters.splice(idx, 1);
@@ -3264,8 +5696,41 @@ function removeCharacter(charId) {
   } else {
     refreshCharacterListUI();
   }
+  // Safety net: sweep out any model mesh left behind in the scene graph (e.g. if
+  // a previous disposal threw before detaching), so its polygons can't keep
+  // being rendered after every character is gone.
+  purgeOrphanModelMeshes();
   countTris();
   if (characters.length === 0) removeScenePlaceholder();
+  // Drop cached render lists / programs so freed GPU buffers are actually let go.
+  try { renderer.renderLists.dispose(); } catch (_) {}
+}
+
+// Remove any SkinnedMesh in the scene that is not owned by a current character.
+function purgeOrphanModelMeshes() {
+  const live = new Set(characters.map(c => c.mesh).filter(Boolean));
+  const orphans = [];
+  scene.traverse((o) => {
+    if (o.isSkinnedMesh && !live.has(o) && !isInsideLiveCharacter(o, live)) orphans.push(o);
+  });
+  for (const o of orphans) {
+    const root = topModelRoot(o);
+    if (live.has(root)) continue;
+    try { disposeLoadedMesh(root); } catch (_) {}
+    if (root.parent) root.parent.remove(root);
+  }
+}
+
+function isInsideLiveCharacter(obj, live) {
+  let p = obj;
+  while (p) { if (live.has(p)) return true; p = p.parent; }
+  return false;
+}
+
+function topModelRoot(obj) {
+  let p = obj;
+  while (p.parent && p.parent !== scene) p = p.parent;
+  return p;
 }
 
 function exportSessionToFile() {
@@ -3438,6 +5903,9 @@ async function loadCharacterModel(file, opts = {}) {
           modelNameEl.textContent = file.name;
           countTris();
           refreshCharacterListUI();
+          // A freshly-added model (not a session restore) gets auto-assigned the
+          // next unfilled character slot from the detected motion set.
+          if (!opts.useSavedTransform) Promise.resolve().then(() => tryAutoAssignCast());
           requestAnimationFrame(() => {
             if (char.mesh !== mesh) return;
             if (animHelper.meshes.indexOf(mesh) >= 0) return;
@@ -3482,7 +5950,7 @@ async function addVmdAnimation(file, opts = {}) {
 async function reloadSceneAndPhysics() {
   const char = getActiveCharacter();
   if (!char?.modelFile) {
-    showError('Немає завантаженої моделі — спочатку завантажте .pmx/.pmd');
+    showError('No model loaded — load a .pmx/.pmd model first');
     return;
   }
   const modelFile = char.modelFile;
@@ -3641,7 +6109,6 @@ function updateSunSky() {
   skyUniforms['turbidity'].value = THREE.MathUtils.lerp(S.skyTurbidity, 1.5, nightF);
   skyUniforms['rayleigh'].value = S.skyRayleigh * dayF;
   skyUniforms['mieCoefficient'].value = S.skyMie * dayF;
-  sky.visible = S.skyOn && dayF > 0.02;
 
   // Night dome — stars + moon
   const nsu = nightSky.material.uniforms;
@@ -3650,7 +6117,6 @@ function updateSunSky() {
   nsu.uStarBright.value = S.starBright * nightF;
   nsu.uMoonBright.value = S.moonInt * nightF;
   nsu.uMoonCol.value.set(S.moonCol);
-  nightSky.visible = S.skyOn && nightF > 0.02;
 
   // Ambient / hemisphere — blend day ↔ night
   const ambDay = S.ambient;
@@ -3663,16 +6129,27 @@ function updateSunSky() {
   hemi.color.copy(skyCol).lerp(nightSkyCol, nightF);
   hemi.groundColor.setHex(nightF > 0.5 ? 0x0a0810 : 0x3a3028);
   hemi.intensity = THREE.MathUtils.lerp(0.15 + S.ambient * 0.5, 0.08, nightF);
+  ambient.color.setHex(0xffffff);
 
-  if (S.skyOn) {
-    scene.background = null;
+  // Optional custom location backdrop replaces the procedural domes when enabled.
+  if (LOC.on) {
+    sky.visible = false;
+    nightSky.visible = false;
+    if (LOC.envTint) applyLocationEnvTint();
   } else {
-    scene.background = _flatBg.set(nightF > 0.5 ? '#020208' : S.flatBg);
+    // Day Preetham dome + night star/moon dome (both can blend at twilight).
+    sky.visible = S.skyOn && dayF > 0.01;
+    nightSky.visible = S.skyOn && nightF > 0.01;
+    if (S.skyOn) {
+      scene.background = null;
+    } else {
+      scene.background = _flatBg.set(nightF > 0.5 ? '#020208' : S.flatBg);
+    }
   }
 
   updateVolumetricLight();
 }
-updateSunSky();
+applyLocation();
 
 const SKY_TIME = {
   morning:  { sunAz: -1.1, sunEl: 0.18, skyTurbidity: 4,  skyRayleigh: 2.5, skyMie: 0.004, ambient: 0.35 },
@@ -3759,8 +6236,9 @@ document.getElementById('cShadows').addEventListener('change', e => {
   updateSunSky();
 });
 
+var _perfAllowVol = true;
 function updateVolumetricLight() {
-  volLightPass.enabled = S.volOn;
+  volLightPass.enabled = S.volOn && (_perfAllowVol !== false);
   const nightF = getNightFactor(S.sunEl);
   const keyLight = nightF > 0.45 ? moonLight : sun;
   volLightPass.updateLights(keyLight, rimLight, fillLight, S);
@@ -4580,9 +7058,117 @@ function onResize() {
   }
   finalFxPass.uniforms.uResolution.value.set(w, h);
   fxaaPass.material.uniforms['resolution'].value.set(1 / (w * px), 1 / (h * px));
+  if (_cinReady) updateLetterboxLayout();
 }
 window.addEventListener('resize', onResize);
 onResize();
+
+// =================================================================
+// ADAPTIVE PERFORMANCE GOVERNOR
+// Lag with 2+ characters is mostly CPU (cloth/hair physics) + heavy
+// post-processing at full pixel ratio — not raw polygon count. This
+// dynamically scales internal render resolution when FPS drops and
+// restores it when there is headroom. Physics substep capping for
+// multi-character scenes is handled inside the motion module.
+// =================================================================
+// The real cost of this scene is the per-frame render pipeline, not the
+// characters: the volumetric light pass re-renders the ENTIRE scene into a
+// depth target every frame and then raymarches 32-48 samples per pixel, on top
+// of SSAO + TAA + bloom + bokeh. A single idle model can drop to ~30 FPS. So
+// the governor works in tiers: first it lowers internal render resolution, then
+// (if still slow) it temporarily disables the heaviest passes, restoring them
+// when there is headroom again. User toggles (S.volOn / S.ssaoOn) are always
+// respected — the governor only ever subtracts, never forces something on.
+const PERF_TIERS = [
+  { scale: 1.00, vol: true,  ssao: true  },
+  { scale: 0.85, vol: true,  ssao: true  },
+  { scale: 0.72, vol: true,  ssao: true  },
+  { scale: 0.72, vol: true,  ssao: false },
+  { scale: 0.72, vol: false, ssao: false },
+  { scale: 0.62, vol: false, ssao: false },
+];
+const PERF = {
+  auto: true,
+  baseDPR: Math.min(1.5, window.devicePixelRatio || 1),
+  scale: 1,
+  tier: 0,
+  lastChange: 0,
+  lowFps: 30,
+  highFps: 56,
+  allowVol: true,
+  allowSsao: true,
+};
+
+function applyPerfScale() {
+  const dpr = Math.max(0.45, PERF.baseDPR * PERF.scale);
+  if (Math.abs(renderer.getPixelRatio() - dpr) < 0.001) return;
+  renderer.setPixelRatio(dpr);
+  onResize();
+}
+
+function applyPerfTier() {
+  const t = PERF_TIERS[PERF.tier] || PERF_TIERS[0];
+  PERF.scale = t.scale;
+  PERF.allowVol = t.vol;
+  PERF.allowSsao = t.ssao;
+  _perfAllowVol = t.vol;
+  applyPerfScale();
+  // Volumetric is re-evaluated every frame via updateVolumetricLight(), which
+  // ANDs S.volOn with PERF.allowVol — so just nudging the flag is enough.
+  // SSAO is only assigned on user toggle, so gate it here directly.
+  ssaoPass.enabled = S.ssaoOn && PERF.allowSsao;
+  updatePerfBadge();
+}
+
+function updatePerfBadge() {
+  const el = document.getElementById('perfBadge');
+  if (!el) return;
+  if (!PERF.auto) {
+    el.textContent = '⚙ Auto off';
+    el.style.opacity = '0.5';
+    el.style.color = '';
+    return;
+  }
+  const pct = Math.round(PERF.scale * 100);
+  const cut = [];
+  if (!PERF.allowVol) cut.push('vol');
+  if (!PERF.allowSsao) cut.push('ssao');
+  el.textContent = `⚙ Auto ${pct}%` + (cut.length ? ` −${cut.join('/')}` : '');
+  el.style.opacity = '1';
+  el.style.color = (PERF.tier > 0) ? '#ffd479' : '';
+}
+
+function perfGovernor(fps, now) {
+  if (!PERF.auto) return;
+  // Never rescale while exporting/screenshotting — output must stay fixed.
+  if (typeof CAPTURE !== 'undefined' && CAPTURE.active) return;
+  if (now - PERF.lastChange < 1100) return;
+  let newTier = PERF.tier;
+  if (fps < PERF.lowFps && PERF.tier < PERF_TIERS.length - 1) newTier++;
+  else if (fps > PERF.highFps && PERF.tier > 0) newTier--;
+  if (newTier !== PERF.tier) {
+    PERF.tier = newTier;
+    PERF.lastChange = now;
+    applyPerfTier();
+  }
+}
+
+(function wirePerfBadge() {
+  const el = document.getElementById('perfBadge');
+  if (!el) return;
+  el.addEventListener('click', () => {
+    PERF.auto = !PERF.auto;
+    if (!PERF.auto) {
+      // Turning auto off restores full quality.
+      PERF.tier = 0;
+      applyPerfTier();
+    } else {
+      PERF.lastChange = performance.now();
+      updatePerfBadge();
+    }
+  });
+  updatePerfBadge();
+})();
 
 const clock = new THREE.Clock();
 let lastFpsT = performance.now();
@@ -4615,8 +7201,47 @@ function updatePrecip(dt) {
 // CINEMATIC CAMERA — Blender-style path keys, 3D editing, smooth tracking
 // ===========================================================================
 const cinHudEl = document.getElementById('cinHud');
-const letterboxEl = document.getElementById('letterbox');
 const PATH_STORAGE_KEY = 'mmd_rtx_campath_v1';
+
+function updateLetterboxLayout() {
+  if (!letterboxEl || !_cinReady) return;
+  if (!CIN.letterbox) {
+    letterboxEl.classList.remove('on');
+    letterboxEl.style.setProperty('--lb-top', '0');
+    letterboxEl.style.setProperty('--lb-bottom', '0');
+    letterboxEl.style.setProperty('--lb-left', '0');
+    letterboxEl.style.setProperty('--lb-right', '0');
+    return;
+  }
+  letterboxEl.classList.add('on');
+  const w = stageEl.clientWidth, h = stageEl.clientHeight;
+  const viewAsp = w / Math.max(h, 1);
+  const targetAsp = Math.max(0.05, CIN.aspectW) / Math.max(0.05, CIN.aspectH);
+  let top = 0, bottom = 0, left = 0, right = 0;
+  if (viewAsp > targetAsp) {
+    const visW = targetAsp / viewAsp;
+    left = right = (1 - visW) * 0.5 * 100;
+  } else {
+    const visH = viewAsp / targetAsp;
+    top = bottom = (1 - visH) * 0.5 * 100;
+  }
+  letterboxEl.style.setProperty('--lb-top', top.toFixed(2) + '%');
+  letterboxEl.style.setProperty('--lb-bottom', bottom.toFixed(2) + '%');
+  letterboxEl.style.setProperty('--lb-left', left.toFixed(2) + '%');
+  letterboxEl.style.setProperty('--lb-right', right.toFixed(2) + '%');
+}
+
+function parseAspectInputs() {
+  const wEl = document.getElementById('vAspectW');
+  const hEl = document.getElementById('vAspectH');
+  const w = Math.max(0.05, parseFloat(wEl?.value) || CIN.aspectW);
+  const h = Math.max(0.05, parseFloat(hEl?.value) || CIN.aspectH);
+  CIN.aspectW = w;
+  CIN.aspectH = h;
+  if (wEl) wEl.value = String(w);
+  if (hEl) hEl.value = String(h);
+  updateLetterboxLayout();
+}
 
 const CIN = {
   enabled: true,
@@ -4626,6 +7251,8 @@ const CIN = {
   viewMode: 'viewport',
   viewportSaved: null,
   letterbox: false,
+  aspectW: 239,
+  aspectH: 100,
   dampPos: 0.08,
   dampLook: 0.065,
   dampFov: 0.09,
@@ -4644,7 +7271,33 @@ const CIN = {
   trackLock: null,
   pathOverride: false,
   _smoothInit: false,
+  vmdCamOn: false,
+  vmdCam: { clip: null, mixer: null, action: null, name: '', duration: 0 },
+  shakeAmp: 0,
+  shakeFreq: 8,
 };
+
+// Camera shake (handheld feel). Applied to the final camera each frame after
+// controls.update(); the positional part is undone at the start of the next
+// frame so it never accumulates into the orbit state.
+const _shakePos = new THREE.Vector3();
+function _shakeNoise(t, seed) {
+  return Math.sin(t * 1.0 + seed) * 0.5 + Math.sin(t * 2.3 + seed * 1.7) * 0.3 + Math.sin(t * 5.1 + seed * 3.1) * 0.2;
+}
+function applyCameraShake(timeSec) {
+  _shakePos.set(0, 0, 0);
+  if (!CIN.shakeAmp || CIN.shakeAmp <= 0) return;
+  if (isFlyModeActive()) return;
+  const t = timeSec * Math.max(0.1, CIN.shakeFreq);
+  const amp = CIN.shakeAmp;
+  _shakePos.set(_shakeNoise(t, 11.1) * amp * 0.15, _shakeNoise(t, 23.7) * amp * 0.15, 0)
+    .applyQuaternion(camera.quaternion);
+  camera.position.add(_shakePos);
+  // Rotational jitter is re-derived each frame by controls.update(), so no undo.
+  camera.rotateZ(_shakeNoise(t, 31.3) * amp * 0.012);
+  camera.rotateX(_shakeNoise(t, 41.9) * amp * 0.009);
+  camera.rotateY(_shakeNoise(t, 7.3) * amp * 0.009);
+}
 
 let cinDragging = false;
 let cinKeyDragIdx = -1;
@@ -4811,6 +7464,10 @@ function syncControlsEnabled() {
     controls.enabled = false;
     return;
   }
+  if (isFlyModeActive()) {
+    controls.enabled = false;
+    return;
+  }
   if (CIN.pathOverride && (CIN.camPlaying || cinDragging || CIN.pathPlay)) {
     controls.enabled = false;
     return;
@@ -4819,7 +7476,7 @@ function syncControlsEnabled() {
 }
 
 function updateCamTransportUI() {
-  const hasKeys = CIN.pathKeys.length >= 1;
+  const hasKeys = CIN.pathKeys.length >= 1 || !!CIN.vmdCam.action;
   const hint = hasKeys ? '' : 'Add a keyframe first (K)';
   const btnPlay = document.getElementById('btnCamPlayPath');
   if (btnPlay) { btnPlay.disabled = !hasKeys; btnPlay.title = hint; }
@@ -4975,6 +7632,7 @@ transformControls.addEventListener('dragging-changed', (e) => {
     stageEl.classList.remove('bone-dragging');
   }
   if (!e.value && CIN.selectedKey >= 0 && !transformControls.object?.userData?.sceneObjId && !isBoneTransformTarget(transformControls.object)) saveCamPath();
+  if (!e.value && transformControls.object?.userData?.lightKeyIdx != null) saveMapLightPaths();
   if (!e.value && transformControls.object?.userData?.sceneObjId) onSceneObjectTransformChanged();
 });
 transformControls.addEventListener('objectChange', () => {
@@ -4984,6 +7642,19 @@ transformControls.addEventListener('objectChange', () => {
   }
   if (isBoneTransformTarget(transformControls.object)) {
     scheduleBoneTransformUpdate(false);
+    return;
+  }
+  const li = transformControls.object?.userData?.lightKeyIdx;
+  if (li != null && li >= 0) {
+    const entry = getActiveMapLightEntry();
+    const k = entry?.pathKeys?.[li];
+    const h = lightKeyHandles[li];
+    if (k && h) {
+      if (transformControls.object.userData.handle === 'target' && h.tgtMesh) k.target = h.tgtMesh.position.toArray();
+      else k.pos = h.posMesh.position.toArray();
+      updateMapLightPathLine(entry.pathKeys);
+      saveMapLightPaths();
+    }
     return;
   }
   const i = CIN.selectedKey;
@@ -5021,26 +7692,57 @@ function catmullRom(p0, p1, p2, p3, t) {
   );
 }
 
-function sampleCatmull(keys, t, field) {
+// Per-key transition easing. `mode` is taken from the destination key so each
+// key controls how the camera arrives at it.
+function applyEase(mode, u) {
+  u = Math.min(1, Math.max(0, u));
+  switch (mode) {
+    case 'linear':    return u;
+    case 'cut':       return u >= 1 ? 1 : 0;       // hold previous, snap at the key
+    case 'easeIn':    return u * u;
+    case 'easeOut':   return 1 - (1 - u) * (1 - u);
+    case 'easeInOut': return u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+    case 'smooth':
+    default:          return u * u * (3 - 2 * u);
+  }
+}
+
+// Resolve a path time into {seg, u, mode} where `u` is the eased 0..1 parameter
+// within segment `seg`, accounting for per-key hold (a dwell on the source key
+// before it starts moving toward the next key).
+function camPathParam(keys, t) {
   const n = keys.length;
-  if (n === 0) return null;
-  if (n === 1) return new THREE.Vector3(...keys[0][field]);
   const times = keys.map(k => k.t);
-  if (t <= times[0]) return new THREE.Vector3(...keys[0][field]);
-  if (t >= times[n - 1]) return new THREE.Vector3(...keys[n - 1][field]);
+  if (t <= times[0]) return { seg: 0, u: 0, mode: 'smooth' };
+  if (t >= times[n - 1]) return { seg: n - 2, u: 1, mode: keys[n - 1].ease || 'smooth' };
   let seg = 0;
   for (let i = 0; i < n - 1; i++) {
     if (t >= times[i] && t <= times[i + 1]) { seg = i; break; }
   }
   const t0 = times[seg], t1 = times[seg + 1];
-  const u = smoothstep((t - t0) / Math.max(t1 - t0, 0.0001));
+  const segLen = Math.max(t1 - t0, 1e-4);
+  const hold = Math.min(Math.max(keys[seg].hold || 0, 0), segLen * 0.95);
+  const moveLen = Math.max(segLen - hold, 1e-4);
+  const raw = Math.min(1, Math.max(0, (t - t0 - hold) / moveLen));
+  const mode = keys[seg + 1].ease || 'smooth';
+  return { seg, u: applyEase(mode, raw), mode };
+}
+
+function sampleCatmull(keys, t, field) {
+  const n = keys.length;
+  if (n === 0) return null;
+  if (n === 1) return new THREE.Vector3(...keys[0][field]);
+  const { seg, u, mode } = camPathParam(keys, t);
+  const p1 = new THREE.Vector3(...keys[seg][field]);
+  const p2 = new THREE.Vector3(...keys[seg + 1][field]);
+  // Hard edges (cut/linear, or adjacent to a cut) use straight interpolation so
+  // the Catmull-Rom spline can't overshoot across a deliberate hard transition.
+  const hardEdge = mode === 'cut' || mode === 'linear'
+    || keys[seg].ease === 'cut' || keys[seg + 1].ease === 'cut';
+  if (hardEdge) return p1.lerp(p2, u);
   const i0 = Math.max(seg - 1, 0);
-  const i1 = seg;
-  const i2 = seg + 1;
   const i3 = Math.min(seg + 2, n - 1);
   const p0 = new THREE.Vector3(...keys[i0][field]);
-  const p1 = new THREE.Vector3(...keys[i1][field]);
-  const p2 = new THREE.Vector3(...keys[i2][field]);
   const p3 = new THREE.Vector3(...keys[i3][field]);
   return catmullRom(p0, p1, p2, p3, u);
 }
@@ -5050,22 +7752,228 @@ function sampleCamPath(t) {
   const pos = sampleCatmull(CIN.pathKeys, t, 'pos');
   const target = sampleCatmull(CIN.pathKeys, t, 'target');
   if (!pos || !target) return null;
-  const times = CIN.pathKeys.map(k => k.t);
   let fov = CIN.pathKeys[0].fov ?? camera.fov;
   if (CIN.pathKeys.length > 1) {
-    if (t <= times[0]) fov = CIN.pathKeys[0].fov ?? fov;
-    else if (t >= times[times.length - 1]) fov = CIN.pathKeys[times.length - 1].fov ?? fov;
-    else {
-      for (let i = 0; i < times.length - 1; i++) {
-        if (t >= times[i] && t <= times[i + 1]) {
-          const u = smoothstep((t - times[i]) / (times[i + 1] - times[i]));
-          fov = (CIN.pathKeys[i].fov ?? fov) + ((CIN.pathKeys[i + 1].fov ?? fov) - (CIN.pathKeys[i].fov ?? fov)) * u;
-          break;
-        }
-      }
-    }
+    const { seg, u } = camPathParam(CIN.pathKeys, t);
+    const f1 = CIN.pathKeys[seg].fov ?? fov;
+    const f2 = CIN.pathKeys[seg + 1].fov ?? f1;
+    fov = f1 + (f2 - f1) * u;
   }
   return { pos, target, fov };
+}
+
+function sampleLightPath(keys, t) {
+  if (!keys?.length) return null;
+  const pos = sampleCatmull(keys, t, 'pos');
+  const target = keys[0].target ? sampleCatmull(keys, t, 'target') : null;
+  if (!pos) return null;
+  let intensity = keys[0].intensity ?? 1;
+  let color = keys[0].color ?? '#ffffff';
+  let angle, penumbra, distance, width, height;
+  if (keys.length > 1) {
+    const { seg, u } = camPathParam(keys, t);
+    const k1 = keys[seg], k2 = keys[seg + 1];
+    intensity = (k1.intensity ?? 1) + ((k2.intensity ?? 1) - (k1.intensity ?? 1)) * u;
+    const c1 = new THREE.Color(k1.color || '#ffffff');
+    const c2 = new THREE.Color(k2.color || '#ffffff');
+    const cm = c1.lerp(c2, u);
+    color = '#' + cm.getHexString();
+    if (k1.angle != null || k2.angle != null) angle = (k1.angle ?? 0.5) + ((k2.angle ?? k1.angle ?? 0.5) - (k1.angle ?? 0.5)) * u;
+    if (k1.penumbra != null || k2.penumbra != null) penumbra = (k1.penumbra ?? 0) + ((k2.penumbra ?? k1.penumbra ?? 0) - (k1.penumbra ?? 0)) * u;
+    if (k1.distance != null || k2.distance != null) distance = (k1.distance ?? 30) + ((k2.distance ?? k1.distance ?? 30) - (k1.distance ?? 30)) * u;
+    if (k1.width != null || k2.width != null) width = (k1.width ?? 4) + ((k2.width ?? k1.width ?? 4) - (k1.width ?? 4)) * u;
+    if (k1.height != null || k2.height != null) height = (k1.height ?? 2) + ((k2.height ?? k1.height ?? 2) - (k1.height ?? 2)) * u;
+  }
+  return { pos, target, intensity, color, angle, penumbra, distance, width, height };
+}
+
+function shouldShowMapLightPath() {
+  return mapBuilderEl?.classList.contains('open') && MAP.editLightPath && getActiveMapLightEntry()?.pathKeys?.length;
+}
+
+function clearLightKeyHandles() {
+  lightKeyHandles.forEach(h => {
+    mapLightPathRoot.remove(h.posMesh);
+    if (h.tgtMesh) mapLightPathRoot.remove(h.tgtMesh);
+  });
+  lightKeyHandles.length = 0;
+}
+
+function updateMapLightPathLine(keys) {
+  if (keys.length >= 2) {
+    const pts = keys.map(k => new THREE.Vector3(...k.pos));
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    lightPathSplineLine.geometry.dispose();
+    lightPathSplineLine.geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(Math.max(48, pts.length * 20)));
+  } else {
+    lightPathSplineLine.geometry.dispose();
+    lightPathSplineLine.geometry = new THREE.BufferGeometry();
+  }
+  const segs = [];
+  keys.forEach(k => {
+    if (k.target) segs.push(new THREE.Vector3(...k.pos), new THREE.Vector3(...k.target));
+  });
+  lightPathTargetLines.geometry.dispose();
+  lightPathTargetLines.geometry = new THREE.BufferGeometry().setFromPoints(segs);
+}
+
+function rebuildMapLightPathVisuals() {
+  clearLightKeyHandles();
+  const entry = getActiveMapLightEntry();
+  if (!entry) { mapLightPathRoot.visible = false; refreshMapLightPathList(); updateMapLightPathUI(); return; }
+  if (!entry.pathKeys) entry.pathKeys = [];
+  entry.pathKeys.sort((a, b) => a.t - b.t);
+  const hasTarget = !!entry.target || entry.pathKeys.some(k => k.target);
+  entry.pathKeys.forEach((k, i) => {
+    const posMesh = new THREE.Mesh(lightKeyGeo, lightKeyMat.clone());
+    posMesh.position.fromArray(k.pos);
+    posMesh.userData = { lightKeyIdx: i, handle: 'pos' };
+    mapLightPathRoot.add(posMesh);
+    let tgtMesh = null;
+    if (hasTarget && k.target) {
+      tgtMesh = new THREE.Mesh(lightTgtGeo, lightTgtMat.clone());
+      tgtMesh.position.fromArray(k.target);
+      tgtMesh.userData = { lightKeyIdx: i, handle: 'target' };
+      mapLightPathRoot.add(tgtMesh);
+    }
+    lightKeyHandles.push({ posMesh, tgtMesh, idx: i });
+  });
+  updateMapLightPathLine(entry.pathKeys);
+  mapLightPathRoot.visible = !!shouldShowMapLightPath();
+  refreshMapLightPathList();
+  updateMapLightPathUI();
+}
+
+function selectMapLightPathKey(idx, handle = 'pos') {
+  MAP.selectedLightKey = idx;
+  MAP.selectedLightHandle = handle;
+  refreshMapLightPathList();
+  if (!MAP.editLightPath || idx < 0 || !lightKeyHandles[idx] || !shouldShowMapLightPath()) {
+    if (!CIN.editPath) { transformControls.detach(); transformControls.visible = false; }
+    return;
+  }
+  const h = lightKeyHandles[idx];
+  transformControls.attach(handle === 'target' && h.tgtMesh ? h.tgtMesh : h.posMesh);
+  transformControls.visible = true;
+}
+
+function addMapLightKeyframe(t) {
+  const entry = getActiveMapLightEntry();
+  if (!entry) return;
+  if (!entry.pathKeys) entry.pathKeys = [];
+  const tt = t ?? MAP.lightPathTime;
+  ensureMapLightPathFits(tt);
+  entry.pathKeys.push(snapshotLightKey(entry, tt));
+  entry.pathKeys.sort((a, b) => a.t - b.t);
+  rebuildMapLightPathVisuals();
+  saveMapLightPaths();
+}
+
+function deleteMapLightKeyframe(idx) {
+  const entry = getActiveMapLightEntry();
+  if (!entry?.pathKeys || idx < 0 || idx >= entry.pathKeys.length) return;
+  entry.pathKeys.splice(idx, 1);
+  MAP.selectedLightKey = -1;
+  rebuildMapLightPathVisuals();
+  saveMapLightPaths();
+}
+
+function ensureMapLightPathFits(t) {
+  if (t > MAP.lightPathDuration - 2) MAP.lightPathDuration = Math.ceil(t + 5);
+}
+
+function saveMapLightPaths() {
+  const data = {};
+  mapLightEntries().forEach(e => { if (e.pathKeys?.length) data[e.id] = e.pathKeys; });
+  try { localStorage.setItem(MAP_LIGHT_PATH_KEY, JSON.stringify({ paths: data, duration: MAP.lightPathDuration })); } catch (_e) {}
+}
+
+function loadMapLightPaths() {
+  try {
+    const raw = localStorage.getItem(MAP_LIGHT_PATH_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.duration) MAP.lightPathDuration = data.duration;
+    const paths = data.paths || data;
+    mapLightEntries().forEach(e => {
+      if (paths[e.id]) e.pathKeys = paths[e.id];
+    });
+  } catch (_e) {}
+}
+
+function refreshMapLightPathList() {
+  const list = document.getElementById('mbLightPathList');
+  if (!list) return;
+  const entry = getActiveMapLightEntry();
+  list.innerHTML = '';
+  if (!entry?.pathKeys?.length) {
+    list.innerHTML = '<div class="note" style="text-align:center;padding:4px;">No light keys — move light & press + Key.</div>';
+    return;
+  }
+  entry.pathKeys.forEach((k, i) => {
+    if (k.ease == null) k.ease = 'smooth';
+    if (k.hold == null) k.hold = 0;
+    const div = document.createElement('div');
+    div.className = 'path-key-item' + (i === MAP.selectedLightKey ? ' sel' : '');
+    const easeOpts = ['cut', 'linear', 'smooth', 'easeIn', 'easeOut', 'easeInOut']
+      .map(m => `<option value="${m}"${k.ease === m ? ' selected' : ''}>${m}</option>`).join('');
+    div.innerHTML =
+      `<div class="pk-row"><span class="pk-t">#${i + 1} · t=${k.t.toFixed(2)}s · I=${(k.intensity ?? 1).toFixed(1)}</span><span class="x">×</span></div>` +
+      `<div class="pk-ctrls">` +
+        `<label>in <select class="pk-ease">${easeOpts}</select></label>` +
+        `<label>I <input class="pk-int" type="number" min="0" step="0.1" value="${(k.intensity ?? 1).toFixed(1)}"></label>` +
+        `<label>hold <input class="pk-hold" type="number" min="0" max="30" step="0.1" value="${(k.hold ?? 0).toFixed(1)}"></label>` +
+      `</div>`;
+    div.querySelector('.pk-t').onclick = () => {
+      selectMapLightPathKey(i, 'pos');
+      MAP.lightPathTime = k.t;
+      updateMapLightPathUI();
+      const s = sampleLightPath(entry.pathKeys, k.t);
+      if (s) applyLightKeyToEntry(entry, s);
+    };
+    div.querySelector('.x').onclick = (e) => { e.stopPropagation(); deleteMapLightKeyframe(i); };
+    div.querySelector('.pk-ease').onchange = (e) => { k.ease = e.target.value; saveMapLightPaths(); updateMapLightPathLine(entry.pathKeys); };
+    div.querySelector('.pk-int').onchange = (e) => { k.intensity = Math.max(0, parseFloat(e.target.value) || 1); saveMapLightPaths(); };
+    div.querySelector('.pk-hold').onchange = (e) => { k.hold = Math.max(0, parseFloat(e.target.value) || 0); saveMapLightPaths(); };
+    list.appendChild(div);
+  });
+  const track = document.getElementById('mbLightPathTrack');
+  if (track) {
+    track.querySelectorAll('.mb-lpath-tick').forEach(el => el.remove());
+    entry.pathKeys.forEach((k, i) => {
+      const tick = document.createElement('div');
+      tick.className = 'mb-lpath-tick' + (i === MAP.selectedLightKey ? ' sel' : '');
+      tick.style.left = (Math.max(0, Math.min(1, k.t / MAP.lightPathDuration)) * 100) + '%';
+      tick.title = `Light key #${i + 1}`;
+      tick.onclick = (e) => { e.stopPropagation(); selectMapLightPathKey(i); MAP.lightPathTime = k.t; updateMapLightPathUI(); };
+      track.appendChild(tick);
+    });
+  }
+}
+
+function updateMapLightPathUI() {
+  const el = document.getElementById('mbLightPathTime');
+  if (el) el.textContent = `${MAP.lightPathTime.toFixed(2)} / ${MAP.lightPathDuration.toFixed(2)} s`;
+  const mk = document.getElementById('mbLightPathMarker');
+  if (mk) mk.style.left = (Math.max(0, Math.min(1, MAP.lightPathTime / MAP.lightPathDuration)) * 100) + '%';
+  const playBtn = document.getElementById('mbLightPlay');
+  if (playBtn) playBtn.textContent = MAP.lightPathPlaying ? '⏸' : '▶';
+}
+
+function updateMapLightPathPlayback(dt) {
+  if (!MAP.lightPathPlaying || !mapBuilderEl?.classList.contains('open')) return;
+  MAP.lightPathTime += dt;
+  if (MAP.lightPathTime > MAP.lightPathDuration) {
+    if (MAP.lightPathLoop) MAP.lightPathTime = 0;
+    else { MAP.lightPathTime = MAP.lightPathDuration; MAP.lightPathPlaying = false; }
+  }
+  mapLightEntries().forEach(entry => {
+    if (!entry.pathKeys?.length) return;
+    const s = sampleLightPath(entry.pathKeys, MAP.lightPathTime);
+    if (s) applyLightKeyToEntry(entry, s);
+  });
+  updateMapLightPathUI();
+  refreshMapLightPathList();
 }
 
 function clearKeyHandles() {
@@ -5142,9 +8050,19 @@ function refreshPathKeyList() {
     return;
   }
   CIN.pathKeys.forEach((k, i) => {
+    if (k.ease == null) k.ease = 'smooth';
+    if (k.hold == null) k.hold = 0;
     const div = document.createElement('div');
     div.className = 'path-key-item' + (i === CIN.selectedKey ? ' sel' : '');
-    div.innerHTML = `<span class="pk-t">#${i + 1} · t=${k.t.toFixed(2)}s · fov ${(k.fov ?? 35).toFixed(0)}°</span><span class="x">×</span>`;
+    const easeOpts = ['cut', 'linear', 'smooth', 'easeIn', 'easeOut', 'easeInOut']
+      .map(m => `<option value="${m}"${k.ease === m ? ' selected' : ''}>${m}</option>`).join('');
+    div.innerHTML =
+      `<div class="pk-row"><span class="pk-t">#${i + 1} · t=${k.t.toFixed(2)}s</span><span class="x">×</span></div>` +
+      `<div class="pk-ctrls">` +
+        `<label title="Transition into this key">in <select class="pk-ease">${easeOpts}</select></label>` +
+        `<label title="FOV at this key">fov <input class="pk-fov" type="number" min="5" max="120" step="1" value="${(k.fov ?? 35).toFixed(0)}"></label>` +
+        `<label title="Dwell on this key before moving (seconds)">hold <input class="pk-hold" type="number" min="0" max="30" step="0.1" value="${(k.hold ?? 0).toFixed(1)}"></label>` +
+      `</div>`;
     div.querySelector('.pk-t').onclick = () => {
       selectPathKey(i, 'pos');
       const s = sampleCamPath(k.t);
@@ -5153,6 +8071,20 @@ function refreshPathKeyList() {
     div.querySelector('.x').onclick = (e) => {
       e.stopPropagation();
       deleteCamKeyframe(i);
+    };
+    div.querySelector('.pk-ease').onchange = (e) => {
+      k.ease = e.target.value;
+      saveCamPath(); updatePathLineGeometry();
+    };
+    div.querySelector('.pk-fov').onchange = (e) => {
+      const v = Math.max(5, Math.min(120, parseFloat(e.target.value) || 35));
+      k.fov = v; e.target.value = v.toFixed(0);
+      saveCamPath();
+    };
+    div.querySelector('.pk-hold').onchange = (e) => {
+      const v = Math.max(0, Math.min(30, parseFloat(e.target.value) || 0));
+      k.hold = v; e.target.value = v.toFixed(1);
+      saveCamPath();
     };
     list.appendChild(div);
   });
@@ -5206,7 +8138,8 @@ function addCamKeyframeAtTime(t, opts = {}) {
   }
 
   const existing = CIN.pathKeys.findIndex(k => Math.abs(k.t - t) < 0.08);
-  const key = { t, pos, target, fov };
+  const prev = existing >= 0 ? CIN.pathKeys[existing] : null;
+  const key = { t, pos, target, fov, ease: prev?.ease || 'smooth', hold: prev?.hold || 0 };
   if (existing >= 0) {
     CIN.pathKeys[existing] = key;
     CIN.selectedKey = existing;
@@ -5264,6 +8197,10 @@ function clearTrackLock() {
 
 function updateCinHud() {
   const parts = [];
+  if (CIN.vmdCamOn && CIN.vmdCam.action) {
+    const act = typeof currentAction === 'function' ? currentAction() : null;
+    parts.push(act ? '🎥 Camera VMD · synced to dance' : '🎥 Camera VMD');
+  }
   if (CIN.viewMode === 'camera') parts.push('📷 Camera View — orbit moves shot cam · 0 to exit');
   if (CIN.trackPickMode) parts.push('🎯 Click model to lock tracking');
   else if (CIN.trackActive) parts.push('🔒 Tracking locked — smooth follow ON');
@@ -5283,9 +8220,154 @@ function updateCinHud() {
   }
 }
 
+// ===========================================================================
+// IMPORTED CAMERA MOTION (.vmd)
+//
+// MMD camera VMD stores per-keyframe { center, distance, euler-rotation, fov }
+// with per-channel Bézier interpolation. MMDLoader.buildCameraAnimation turns
+// that into an AnimationClip with tracks: target.position, .quaternion,
+// .position, .fov. We drive it with a private AnimationMixer on the real
+// camera (mirroring MMDAnimationHelper._animateCamera) and feed it the SAME
+// clock as the character dance — so loading a song's camera file makes the
+// camera follow the choreography automatically, exactly like the hand-authored
+// MMD result, including hard cuts.
+// ===========================================================================
+let _camTargetObj = null;       // child 'target' the clip's lookAt point binds to
+const _vmdTgtW = new THREE.Vector3();
+
+function ensureCamTarget() {
+  if (_camTargetObj) return _camTargetObj;
+  _camTargetObj = new THREE.Object3D();
+  _camTargetObj.name = 'target';
+  camera.add(_camTargetObj);
+  return _camTargetObj;
+}
+
+// Heuristic: MMD camera-motion files are conventionally named with "camera" /
+// "カメラ" (e.g. *_Camera.vmd). Used to auto-route zip/library files.
+function looksLikeCameraVmd(name) {
+  return /camera|カメラ/i.test(name || '');
+}
+
+function loadCameraVmd(file) {
+  // Reuse the blob URL already registered for zip/folder files; only create a
+  // fresh one for ad-hoc File objects not in the session map.
+  const mapped = fileMap.get((file.name || '').toLowerCase());
+  const url = mapped || URL.createObjectURL(file);
+  const ownUrl = !mapped;
+  ensureCamTarget();
+  mmdLoader.loadAnimation(url, camera, (clip) => {
+    if (ownUrl) URL.revokeObjectURL(url);
+    if (!clip || !clip.tracks || clip.tracks.length === 0 || !(clip.duration > 0)) {
+      showError('This .vmd has no camera data (it looks like a model-motion file).');
+      return;
+    }
+    // Tear down a previous import
+    if (CIN.vmdCam.mixer) { CIN.vmdCam.mixer.stopAllAction(); CIN.vmdCam.mixer.uncacheClip(CIN.vmdCam.clip); }
+
+    const mixer = new THREE.AnimationMixer(camera);
+    const action = mixer.clipAction(clip);
+    action.play();
+
+    CIN.vmdCam = { clip, mixer, action, name: file.name, duration: clip.duration };
+    CIN.vmdCamOn = true;
+    CIN._smoothInit = false;
+
+    // Make the camera timeline long enough; auto-sync to the dance if present.
+    CIN.camDuration = Math.max(CIN.camDuration, Math.ceil(clip.duration + 1));
+    const hasDance = typeof currentAction === 'function' && currentAction();
+    CIN.syncTimeline = true;
+    if (!hasDance) { CIN.camPlaying = true; if (cinPlayPauseEl) cinPlayPauseEl.textContent = '⏸'; }
+
+    const onEl = document.getElementById('cCamVmdOn');
+    if (onEl) onEl.checked = true;
+    const clrEl = document.getElementById('btnClearCamVmd');
+    if (clrEl) clrEl.disabled = false;
+    const nameEl = document.getElementById('camVmdName');
+    if (nameEl) nameEl.textContent = `${file.name} · ${clip.duration.toFixed(1)}s` + (hasDance ? ' · synced to dance' : '');
+
+    seekCamTime(getPathTimelineTime());
+    applyVmdCamera();   // snap to current frame immediately for instant feedback
+    controls.enabled = false;
+    updateCinHud();
+    updateCinTimelineUI();
+    refreshVmdLibraryUI();
+  }, undefined, (err) => {
+    if (ownUrl) URL.revokeObjectURL(url);
+    showError('Failed to load camera .vmd: ' + (err?.message || err));
+  });
+}
+
+function clearCameraVmd() {
+  if (CIN.vmdCam.mixer) { CIN.vmdCam.mixer.stopAllAction(); CIN.vmdCam.mixer.uncacheClip(CIN.vmdCam.clip); }
+  CIN.vmdCam = { clip: null, mixer: null, action: null, name: '', duration: 0 };
+  CIN.vmdCamOn = false;
+  const onEl = document.getElementById('cCamVmdOn'); if (onEl) onEl.checked = false;
+  const clrEl = document.getElementById('btnClearCamVmd'); if (clrEl) clrEl.disabled = true;
+  const nameEl = document.getElementById('camVmdName'); if (nameEl) nameEl.textContent = '— no camera motion —';
+  controls.enabled = true;
+  updateCinHud();
+}
+
+function shouldApplyVmdCam() {
+  if (!CIN.vmdCam.action || !CIN.vmdCamOn) return false;
+  if (CIN.userNav || _tcDragging) return false;
+  if (cinDragging || CIN.camPlaying || CIN.pathPlay) return true;
+  if (CIN.syncTimeline && typeof currentAction === 'function' && currentAction() &&
+      typeof motion.animPlaying !== 'undefined' && motion.animPlaying) return true;
+  return false;
+}
+
+// Evaluate the imported camera clip at time t and drive the real camera,
+// mirroring MMDAnimationHelper._animateCamera (up + lookAt from the target).
+function applyVmdCamera() {
+  const vc = CIN.vmdCam;
+  const dur = vc.duration || 0;
+  let t = getPathTimelineTime();
+  if (dur > 0) t = CIN.camLoop ? (t % dur + dur) % dur : Math.max(0, Math.min(t, dur));
+  vc.mixer.setTime(t);
+  camera.updateProjectionMatrix();
+  camera.up.set(0, 1, 0).applyQuaternion(camera.quaternion);
+  // The clip writes the look-at center into the target's local .position as a
+  // world coordinate (same convention as MMDAnimationHelper), so use it directly.
+  _vmdTgtW.copy(_camTargetObj.position);
+  camera.lookAt(_vmdTgtW);
+  controls.target.copy(_vmdTgtW);
+  _smoothPos.copy(camera.position);
+  _smoothTgt.copy(controls.target);
+  // Mirror live fov to the UI slider if present.
+  const vEl = document.getElementById('vCamFov');
+  if (vEl && document.activeElement !== vEl) vEl.value = camera.fov.toFixed(0);
+}
+
 function updateCinematicCamera(dt) {
+  if (isFlyModeActive()) {
+    syncControlsEnabled();
+    return;
+  }
   CIN.pathOverride = false;
   let pathT = null;
+
+  // Imported camera motion takes priority over the hand-keyed path.
+  if (shouldApplyVmdCam()) {
+    if (CIN.camPlaying && !CIN.userNav &&
+        !(CIN.syncTimeline && typeof currentAction === 'function' && currentAction())) {
+      CIN.camTime += dt;
+      const dur = getCamDuration();
+      if (CIN.camTime > dur) {
+        if (CIN.camLoop) CIN.camTime = 0;
+        else { CIN.camTime = dur; CIN.camPlaying = false; if (cinPlayPauseEl) cinPlayPauseEl.textContent = '▶'; }
+      }
+    }
+    applyVmdCamera();
+    CIN.pathOverride = true;
+    controls.enabled = false;
+    letterboxEl.classList.toggle('on', CIN.letterbox);
+    updateLetterboxLayout();
+    updateCinHud();
+    updateCinTimelineUI();
+    return;
+  }
 
   // Standalone camera timeline playback (no VMD needed)
   if (CIN.camPlaying && !CIN.userNav) {
@@ -5353,7 +8435,7 @@ function updateCinematicCamera(dt) {
   syncControlsEnabled();
 
   letterboxEl.classList.toggle('on', CIN.letterbox);
-  letterboxEl.classList.toggle('r239', CIN.letterbox);
+  updateLetterboxLayout();
   updateCinHud();
   updateCinTimelineUI();
 }
@@ -5411,9 +8493,35 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 
 renderer.domElement.addEventListener('pointermove', (e) => {
   bonePickPointerMove(e.clientX, e.clientY);
+  if (BONE.enabled && !_tcDragging && motion.currentMesh?.skeleton) {
+    updateRigHover(e.clientX, e.clientY);
+  }
 });
 
 // UI bindings
+document.getElementById('cCamVmdOn').addEventListener('change', e => {
+  if (e.target.checked && !CIN.vmdCam.action) { e.target.checked = false; showError('Import a camera .vmd first.'); return; }
+  CIN.vmdCamOn = e.target.checked;
+  CIN._smoothInit = false;
+  if (!CIN.vmdCamOn) controls.enabled = true;
+  updateCinHud();
+});
+document.getElementById('btnClearCamVmd').addEventListener('click', () => clearCameraVmd());
+document.getElementById('btnUseCamVmdLib').addEventListener('click', () => {
+  const name = document.getElementById('camVmdLibSel').value;
+  const file = name && globalVmdFiles.get(name.toLowerCase());
+  if (file) loadCameraVmd(file);
+  else showError('Camera VMD not found in loaded files.');
+});
+
+// Multi-character recommendation splash
+document.getElementById('castAddBtn').addEventListener('click', () => {
+  castModelInput.click();   // model or .zip; loadCharacterModel auto-assigns the next slot
+});
+document.getElementById('castDismissBtn').addEventListener('click', () => {
+  castDismissedSig = castPlanSignature(detectCastPlan());
+  hideCastSplash();
+});
 document.getElementById('cCamCine').addEventListener('change', e => { CIN.enabled = e.target.checked; });
 document.getElementById('cCamLivePath').addEventListener('change', e => { CIN.livePath = e.target.checked; });
 document.getElementById('cCamSyncTL').addEventListener('change', e => { CIN.syncTimeline = e.target.checked; updateCinHud(); });
@@ -5425,9 +8533,28 @@ document.getElementById('cCamEditPath').addEventListener('change', e => {
   updateCinHud();
 });
 document.getElementById('cHidePathVisuals').addEventListener('change', () => syncPathVisuals());
-document.getElementById('cCamLetterbox').addEventListener('change', e => { CIN.letterbox = e.target.checked; });
+document.getElementById('cCamLetterbox').addEventListener('change', e => { CIN.letterbox = e.target.checked; updateLetterboxLayout(); });
+['vAspectW', 'vAspectH'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', parseAspectInputs);
+  document.getElementById(id)?.addEventListener('input', parseAspectInputs);
+});
+const _aspW = document.getElementById('vAspectW');
+const _aspH = document.getElementById('vAspectH');
+if (_aspW) _aspW.value = String(CIN.aspectW);
+if (_aspH) _aspH.value = String(CIN.aspectH);
+_cinReady = true;
+updateLetterboxLayout();
 bindSlider('rCamDamp', 'vCamDamp', v => { CIN.dampPos = v; }, v => v.toFixed(3));
 bindSlider('rCamLook', 'vCamLook', v => { CIN.dampLook = v; }, v => v.toFixed(3));
+bindSlider('rCamShake', 'vCamShake', v => { CIN.shakeAmp = v; }, v => v.toFixed(2));
+bindSlider('rCamShakeF', 'vCamShakeF', v => { CIN.shakeFreq = v; }, v => v.toFixed(1));
+bindSlider('rCamInertia', 'vCamInertia', v => { controls.dampingFactor = v; }, v => v.toFixed(3));
+bindSlider('rCamOrbit', 'vCamOrbit', v => { controls.rotateSpeed = v; }, v => v.toFixed(2));
+bindSlider('rCamZoom', 'vCamZoom', v => { controls.zoomSpeed = v; }, v => v.toFixed(2));
+bindSlider('rCamPan', 'vCamPan', v => { controls.panSpeed = v; }, v => v.toFixed(2));
+document.getElementById('cCamInertia')?.addEventListener('change', e => {
+  controls.enableDamping = e.target.checked;
+});
 bindSlider('rCamDur', 'vCamDur', v => { setCamDuration(v); }, v => String(Math.round(v)));
 document.getElementById('vCamDur').addEventListener('change', e => {
   setCamDuration(parseFloat(e.target.value) || 30);
@@ -5592,7 +8719,7 @@ document.getElementById('cinAddKey').onclick = () => addCamKeyframe();
 document.getElementById('cinExtend30').onclick = () => extendCamDuration(30);
 
 cinPlayPauseEl.onclick = () => {
-  if (CIN.pathKeys.length < 1) { updateCinHud(); return; }
+  if (CIN.pathKeys.length < 1 && !CIN.vmdCam.action) { updateCinHud(); return; }
   CIN.camPlaying = !CIN.camPlaying;
   cinPlayPauseEl.textContent = CIN.camPlaying ? '⏸' : '▶';
   if (CIN.camPlaying && CIN.pathKeys.length) CIN.camTime = Math.min(CIN.camTime, getCamDuration());
@@ -5745,7 +8872,28 @@ refreshCamList();
 // Number keys 1–9 fly to the corresponding bookmark — DCC-app convention.
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.key === 'k' || e.key === 'K') { addCamKeyframe(); return; }
+  if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    toggleMapFlyMode();
+    e.preventDefault();
+    return;
+  }
+  const flyActive = isFlyModeActive();
+  if (flyActive) {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === 'q' || k === 'e') { MAP.keys[k] = true; e.preventDefault(); return; }
+    if (e.key === 'Shift') { MAP.keys.shift = true; return; }
+  }
+  if (e.key === 'k' || e.key === 'K') {
+    if (mapBuilderEl?.classList.contains('open') && document.getElementById('mbLightPathEdit')?.checked) {
+      addMapLightKeyframe(MAP.lightPathTime);
+      return;
+    }
+    addCamKeyframe();
+    return;
+  }
+  if (e.key === 'l' || e.key === 'L') {
+    if (mapBuilderEl?.classList.contains('open')) { addMapLightKeyframe(MAP.lightPathTime); return; }
+  }
   if (sceneEditorEnabled && !e.ctrlKey && !e.metaKey && !e.altKey && !BONE.enabled) {
     if (e.key === 'g' || e.key === 'G') { setSceneTransformMode('translate'); return; }
     if (e.key === 'r' || e.key === 'R') { setSceneTransformMode('rotate'); return; }
@@ -5771,6 +8919,12 @@ window.addEventListener('keydown', (e) => {
     const idx = parseInt(e.key) - 1;
     if (camBookmarks[idx]) flyTo(camBookmarks[idx]);
   }
+});
+window.addEventListener('keyup', (e) => {
+  if (!isFlyModeActive()) return;
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === 'q' || k === 'e') MAP.keys[k] = false;
+  if (e.key === 'Shift') MAP.keys.shift = false;
 });
 
 // ===========================================================================
@@ -5970,6 +9124,11 @@ function seekRenderTime(t) {
     act.paused = true;
     if (animHelper) animHelper.update(0);
   }
+  // Imported camera motion must also follow each rendered frame.
+  if (CIN.vmdCamOn && CIN.vmdCam.action) {
+    applyVmdCamera();
+    controls.update();
+  }
 }
 
 function applyCameraForRender(t) {
@@ -5992,6 +9151,7 @@ function applyCameraForRender(t) {
 function renderSceneFrame(dt, timeSec) {
   applyCameraForRender(timeSec);
   controls.update();
+  applyCameraShake(timeSec);
   skyGroup.position.copy(camera.position);
   updateRimFill();
 
@@ -6005,6 +9165,10 @@ function renderSceneFrame(dt, timeSec) {
   const tSec = performance.now() * 0.001;
   volLightPass.uniforms.uTime.value = tSec;
   finalFxPass.uniforms.uTime.value = tSec;
+  if (locationBg.visible) {
+    locationBg.material.uniforms.uTime.value = tSec;
+    camera.getWorldDirection(locationBg.material.uniforms.uCamDir.value);
+  }
   composer.render(dt);
 }
 
@@ -6284,8 +9448,12 @@ function tick() {
   // huge catch-up if dt is, say, 1 second — capping at 1/30 keeps it sane.
   const rawDt = clock.getDelta();
   const dt = Math.min(rawDt, 1 / 30);
+  camera.position.sub(_shakePos); // undo previous frame's positional shake
+  updateMapFly(dt);
+  updateMapLightPathPlayback(dt);
   updateCinematicCamera(dt);
-  controls.update();
+  if (!isFlyModeActive()) controls.update();
+  applyCameraShake(performance.now() * 0.001);
   if (RENDER.liveRecording) updateLiveRecordProgress();
   // Sky dome follows camera; sun/moon stay in world space
   skyGroup.position.copy(camera.position);
@@ -6324,6 +9492,10 @@ function tick() {
   updateVolumetricLight();
   volLightPass.uniforms.uTime.value = performance.now() * 0.001;
   finalFxPass.uniforms.uTime.value = performance.now() * 0.001;
+  if (locationBg.visible) {
+    locationBg.material.uniforms.uTime.value = performance.now() * 0.001;
+    camera.getWorldDirection(locationBg.material.uniforms.uCamDir.value);
+  }
 
   updateCharacterBoneVisuals(_tickFrame);
   updateMultiCharacterMotion(getCharacterMotionStates(), dt, { tlRegEl, tlLoopEl, loopIn, loopOut, tickFrame: _tickFrame });
@@ -6334,7 +9506,9 @@ function tick() {
   frames++;
   const now = performance.now();
   if (now - lastFpsT > 500) {
-    fpsEl.textContent = (frames * 1000 / (now - lastFpsT)).toFixed(0);
+    const fps = frames * 1000 / (now - lastFpsT);
+    fpsEl.textContent = fps.toFixed(0);
+    perfGovernor(fps, now);
     frames = 0;
     lastFpsT = now;
   }
@@ -6379,6 +9553,54 @@ tick();
   controls.target.set(0, 2, 0);
   controls.update();
 }
+</script>
+
+<script>
+/* Mobile UI: drawer toggle + quick play FAB. Plain script so it runs
+   independently of the ES module above. */
+(function () {
+  const panel = document.getElementById('panel');
+  const menuBtn = document.getElementById('mobileMenuBtn');
+  const backdrop = document.getElementById('mobileBackdrop');
+  const playBtn = document.getElementById('mobilePlayBtn');
+  if (!panel || !menuBtn) return;
+
+  function setDrawer(open) {
+    panel.classList.toggle('open', open);
+    backdrop.classList.toggle('show', open);
+    menuBtn.textContent = open ? '✕' : '☰';
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  menuBtn.addEventListener('click', function () {
+    setDrawer(!panel.classList.contains('open'));
+  });
+  backdrop.addEventListener('click', function () { setDrawer(false); });
+
+  // Tapping a file/scene action that immediately shows a result on the 3D
+  // stage closes the drawer so the user sees it right away.
+  ['btnPickModel', 'btnPickFolder', 'btnPickZip', 'btnImportSession', 'btnFrame', 'btnScreenshot']
+    .forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', function () { setDrawer(false); });
+    });
+
+  // Quick play/pause forwards to whichever timeline transport is active.
+  let playing = false;
+  function forwardPlay() {
+    const cinTl = document.getElementById('cinTimeline');
+    const tl = document.getElementById('timeline');
+    const visible = (el) => el && el.offsetParent !== null && !el.classList.contains('hidden');
+    let target = null;
+    if (visible(cinTl)) target = document.getElementById('cinPlayPause');
+    else if (visible(tl)) target = document.getElementById('tlPlayPause');
+    if (!target) target = playing ? document.getElementById('btnPause') : document.getElementById('btnPlay');
+    if (target) target.click();
+    playing = !playing;
+    playBtn.textContent = playing ? '⏸' : '▶';
+  }
+  if (playBtn) playBtn.addEventListener('click', forwardPlay);
+})();
 </script>
 </body>
 </html>
